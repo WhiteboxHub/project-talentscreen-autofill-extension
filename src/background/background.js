@@ -1,5 +1,6 @@
 // Background service worker
-importScripts('/src/background/resumeProcessor.js');
+// TalentScreen - Whitebox Learning Autofill Extension v2.0
+importScripts('/src/core/resumeProcessor.js');
 
 try {
   if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {

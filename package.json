@@ -1,9 +1,15 @@
 {
+  "name": "talentscreen-whitebox-autofill",
+  "version": "2.0.0",
+  "description": "TalentScreen - Whitebox Learning Autofill extension for job applications",
+  "author": "Whitebox Learning - Sampath Velupula",
+  "license": "MIT",
+  "homepage": "https://chromewebstore.google.com/detail/talentscreen-autofill/bebdlhhpgmegdebdballinfmfnlpmeio",
   "scripts": {
-    "check": "node --check background.js && node --check content.js && node --check resumeProcessor.js && node --check sidepanel.js",
-    "package": "powershell -ExecutionPolicy Bypass -File .\\package.ps1"
+    "lint": "node --check src/**/*.js",
+    "build": "npm run lint && node build/package.js",
+    "test": "echo 'Tests not yet implemented' && exit 0"
   },
-  "dependencies": {
-    "puppeteer": "^24.37.5"
-  }
+  "dependencies": {},
+  "devDependencies": {}
 }

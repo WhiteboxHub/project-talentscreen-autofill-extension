@@ -1,6 +1,11 @@
 /**
- * Utility to process and normalize JSON Resume data into a flat, searchable index.
+ * ResumeProcessor - Central module for normalizing JSON Resume data
+ * Supports standard JSON Resume schema + custom_fields extension
+ *
+ * @version 2.0.0
+ * @description TalentScreen - Whitebox Learning Autofill Extension
  */
+
 class ResumeProcessor {
     static isPlainObject(value) {
         return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -260,22 +265,14 @@ class ResumeProcessor {
         };
     }
 
-    /**
-     * Text Normalization Utility
-     * - Lowercases text
-     * - Removes punctuation (replaces with space)
-     * - Standardizes whitespace
-     * - Expands abbreviations
-     */
     static normalizeText(text) {
         if (!text || typeof text !== 'string') return '';
 
         let normalized = text.toLowerCase()
-            .replace(/[^\w\s]|_/g, ' ') // Strip punctuation
-            .replace(/\s+/g, ' ')       // Standardize whitespace
+            .replace(/[^\w\s]|_/g, ' ')
+            .replace(/\s+/g, ' ')
             .trim();
 
-        // Abbreviation expansion dictionary
         const abbreviations = {
             "ml": "machine learning",
             "ai": "artificial intelligence",
@@ -293,232 +290,250 @@ class ResumeProcessor {
             "qa": "quality assurance"
         };
 
-        // Split, expand, and rejoin
         return normalized.split(' ').map(word => abbreviations[word] || word).join(' ');
     }
 
     /**
-     * Normalizes a JSON Resume into a structured internal index.
+     * Normalizes a JSON Resume into a structured internal index with custom_fields support
+     * @param {Object} resumeData - Raw resume JSON
+     * @returns {Object} Normalized resume data structure
+     * @throws {Error} If resume data is invalid
      */
     static normalize(resumeData) {
-        if (!resumeData) return {};
-
-        const canonicalResume = this.buildCanonicalResume(resumeData);
-
-        const basics = canonicalResume.basics || {};
-        const work = canonicalResume.work || [];
-        const skills = canonicalResume.skills || [];
-        const location = basics.location || {};
-        const profiles = basics.profiles || [];
-
-        // 1. Identity
-        const fullName = (basics.name || "").trim();
-        const nameParts = fullName.split(/\s+/);
-        let firstName = "", middleName = "", lastName = "";
-
-        if (nameParts.length === 1) {
-            firstName = nameParts[0];
-        } else if (nameParts.length === 2) {
-            firstName = nameParts[0];
-            lastName = nameParts[1];
-        } else if (nameParts.length > 2) {
-            firstName = nameParts[0];
-            lastName = nameParts[nameParts.length - 1];
-            middleName = nameParts.slice(1, nameParts.length - 1).join(" ");
-        }
-
-        // Helper to find value by fuzzy key match
-        const findByPattern = (obj, patterns) => {
-            if (!obj) return "";
-            const keys = Object.keys(obj);
-            const foundKey = keys.find(k => patterns.some(p => k.toLowerCase().includes(p.toLowerCase())));
-            return foundKey ? obj[foundKey] : "";
-        };
-
-        const preferredName = ""; // User requested to NOT fill preferred name
-
-        const identity = {
-            first_name: firstName,
-            middle_name: middleName,
-            last_name: lastName,
-            preferred_name: preferredName,
-            full_name: fullName,
-            gender: basics.gender || "",
-            pronouns: basics.pronouns || (basics.custom && basics.custom.pronouns) || "",
-            veteran_status: basics.veteranStatus || "",
-            disability_status: basics.disabilityStatus || "",
-            ethnicity: basics.ethnicity || basics.race || (basics.demographics && (basics.demographics.ethnicity || basics.demographics.race)) || "",
-            sponsorship_required: (basics.workAuthorization && basics.workAuthorization.requiresSponsorshipNowOrFuture) ||
-                findByPattern(basics.workAuthorization, ["sponsorship"]),
-            hispanic_latino: basics.hispanicLatino || (basics.demographics && basics.demographics.hispanicOrLatino) || ""
-        };
-
-        const availabilityVal = (basics.availability && basics.availability.soonestStartDate) ||
-            findByPattern(basics.availability, ["soonest", "start date", "available"]);
-
-        const availability = {
-            start_date: availabilityVal
-        };
-
-        // 2. Contact & Links
-        const getProfile = (network) => {
-            const p = profiles.find(pf => this.normalizeText(pf.network).includes(network));
-            return p ? p.url : "";
-        };
-
-        const contact = {
-            email: basics.email || "",
-            phone: basics.phone ? basics.phone.replace(/[^\d+]/g, "") : "", // Keep only digits and +
-            linkedin: getProfile('linkedin'),
-            github: getProfile('github'),
-            portfolio: basics.url || "",
-
-            // Location included in contact for convenience
-            address: location.address || "",
-            city: location.city || "",
-            state: location.region || "",
-            zip_code: location.postalCode || "",
-            country: location.countryCode || "",
-            location: (location.city && location.region) ? `${location.city}, ${location.region}` : (location.address || location.city || "")
-        };
-
-        // 3. Employment & Reverse Maps
-        const workEntries = work.map(job => {
-            const start = job.startDate ? new Date(job.startDate) : null;
-            const end = job.endDate ? new Date(job.endDate) : new Date();
-            let durationMonths = 0;
-
-            if (start && !isNaN(start.getTime()) && !isNaN(end.getTime())) {
-                const diffTime = Math.abs(end - start);
-                durationMonths = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 30.44));
+        try {
+            if (!resumeData) {
+                throw new Error("Resume data is required");
             }
 
-            return {
-                ...job,
-                durationMonths,
-                normCompany: this.normalizeText(job.name),
-                normTitle: this.normalizeText(job.position)
+            const canonicalResume = this.buildCanonicalResume(resumeData);
+
+            const basics = canonicalResume.basics || {};
+            const work = canonicalResume.work || [];
+            const skills = canonicalResume.skills || [];
+            const location = basics.location || {};
+            const profiles = basics.profiles || [];
+
+            // Extract custom_fields (TalentScreen extension)
+            const customFields = canonicalResume.custom_fields || {};
+            const eeo = customFields.eeo || {};
+            const legal = customFields.legal || {};
+            const technical = customFields.technical_screening || {};
+            const logistics = customFields.application_logistics || {};
+
+            // 1. Identity
+            const fullName = (basics.name || "").trim();
+            const nameParts = fullName.split(/\s+/);
+            let firstName = "", middleName = "", lastName = "";
+
+            if (nameParts.length === 1) {
+                firstName = nameParts[0];
+            } else if (nameParts.length === 2) {
+                firstName = nameParts[0];
+                lastName = nameParts[1];
+            } else if (nameParts.length > 2) {
+                firstName = nameParts[0];
+                lastName = nameParts[nameParts.length - 1];
+                middleName = nameParts.slice(1, nameParts.length - 1).join(" ");
+            }
+
+            const findByPattern = (obj, patterns) => {
+                if (!obj) return "";
+                const keys = Object.keys(obj);
+                const foundKey = keys.find(k => patterns.some(p => k.toLowerCase().includes(p.toLowerCase())));
+                return foundKey ? obj[foundKey] : "";
             };
-        });
 
-        let totalMonths = 0;
-        const companyToDuration = {};
-        const titleToDuration = {};
-        const rolesByYear = {};
+            const preferredName = "";
 
-        workEntries.forEach(job => {
-            totalMonths += job.durationMonths;
-            companyToDuration[job.normCompany] = (companyToDuration[job.normCompany] || 0) + job.durationMonths;
-            titleToDuration[job.normTitle] = (titleToDuration[job.normTitle] || 0) + job.durationMonths;
+            const identity = {
+                first_name: firstName,
+                middle_name: middleName,
+                last_name: lastName,
+                preferred_name: preferredName,
+                full_name: fullName,
+                gender: eeo.gender || basics.gender || "",
+                pronouns: eeo.pronouns || basics.pronouns || (basics.custom && basics.custom.pronouns) || "",
+                veteran_status: eeo.veteran_status || basics.veteranStatus || "",
+                disability_status: eeo.disability_status || basics.disabilityStatus || "",
+                ethnicity: eeo.ethnicity || basics.ethnicity || basics.race || (basics.demographics && (basics.demographics.ethnicity || basics.demographics.race)) || "",
+                sponsorship_required: legal.sponsorship_required_now || legal.sponsorship_required_future || (basics.workAuthorization && basics.workAuthorization.requiresSponsorshipNowOrFuture) ||
+                    findByPattern(basics.workAuthorization, ["sponsorship"]) || "",
+                hispanic_latino: eeo.hispanic_latino || basics.hispanicLatino || (basics.demographics && basics.demographics.hispanicOrLatino) || "",
+                authorized_to_work: legal.work_auth_us !== undefined ? (legal.work_auth_us ? "Yes" : "No") : "",
+                security_clearance_eligible: legal.security_clearance || "",
+                lgbtq: eeo.lgbtq || "",
+                relocation_open: logistics.willing_to_relocate || "",
+                notice_period: legal.notice_period_days ? `${legal.notice_period_days} days` : ""
+            };
 
-            if (job.startDate) {
-                const startYear = new Date(job.startDate).getFullYear();
-                const endYear = job.endDate ? new Date(job.endDate).getFullYear() : new Date().getFullYear();
-                for (let y = startYear; y <= endYear; y++) {
-                    if (!rolesByYear[y]) rolesByYear[y] = [];
-                    if (!rolesByYear[y].includes(job.position)) {
-                        rolesByYear[y].push(job.position);
+            const availabilityVal = (basics.availability && basics.availability.soonestStartDate) ||
+                findByPattern(basics.availability, ["soonest", "start date", "available"]);
+
+            const availability = {
+                start_date: availabilityVal
+            };
+
+            // 2. Contact & Links
+            const getProfile = (network) => {
+                const p = profiles.find(pf => this.normalizeText(pf.network).includes(network));
+                return p ? p.url : "";
+            };
+
+            const contact = {
+                email: basics.email || "",
+                phone: basics.phone ? basics.phone.replace(/[^\d+]/g, "") : "",
+                linkedin: getProfile('linkedin'),
+                github: getProfile('github'),
+                portfolio: basics.url || "",
+                address: location.address || "",
+                city: location.city || "",
+                state: location.region || "",
+                zip_code: location.postalCode || "",
+                country: location.countryCode || "",
+                location: (location.city && location.region) ? `${location.city}, ${location.region}` : (location.address || location.city || "")
+            };
+
+            // 3. Employment & Reverse Maps
+            const workEntries = work.map(job => {
+                const start = job.startDate ? new Date(job.startDate) : null;
+                const end = job.endDate ? new Date(job.endDate) : new Date();
+                let durationMonths = 0;
+
+                if (start && !isNaN(start.getTime()) && !isNaN(end.getTime())) {
+                    const diffTime = Math.abs(end - start);
+                    durationMonths = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 30.44));
+                }
+
+                return {
+                    ...job,
+                    durationMonths,
+                    normCompany: this.normalizeText(job.name),
+                    normTitle: this.normalizeText(job.position)
+                };
+            });
+
+            let totalMonths = 0;
+            const companyToDuration = {};
+            const titleToDuration = {};
+            const rolesByYear = {};
+
+            workEntries.forEach(job => {
+                totalMonths += job.durationMonths;
+                companyToDuration[job.normCompany] = (companyToDuration[job.normCompany] || 0) + job.durationMonths;
+                titleToDuration[job.normTitle] = (titleToDuration[job.normTitle] || 0) + job.durationMonths;
+
+                if (job.startDate) {
+                    const startYear = new Date(job.startDate).getFullYear();
+                    const endYear = job.endDate ? new Date(job.endDate).getFullYear() : new Date().getFullYear();
+                    for (let y = startYear; y <= endYear; y++) {
+                        if (!rolesByYear[y]) rolesByYear[y] = [];
+                        if (!rolesByYear[y].includes(job.position)) {
+                            rolesByYear[y].push(job.position);
+                        }
                     }
                 }
-            }
-        });
-
-        const employment = {
-            current_role: workEntries[0]?.position || basics.label || "",
-            current_company: workEntries[0]?.name || "",
-            years_total: Math.round(totalMonths / 12),
-            roles_by_year: rolesByYear,
-            history: workEntries
-        };
-
-        // 4. Skills & Reverse Maps
-        const normalizedSkillSet = new Set();
-        const skillFrequency = {};
-        const skillToYears = {};
-        const skillCategories = {};
-
-        skills.forEach(skillCategory => {
-            const catName = this.normalizeText(skillCategory.name);
-            skillCategories[catName] = [];
-
-            const keywords = skillCategory.keywords || [skillCategory.name];
-
-            keywords.forEach(keyword => {
-                const normKeyword = this.normalizeText(keyword);
-                normalizedSkillSet.add(normKeyword);
-                skillCategories[catName].push(normKeyword);
-
-                skillFrequency[normKeyword] = (skillFrequency[normKeyword] || 0) + 1;
-                skillToYears[normKeyword] = employment.years_total;
             });
-        });
 
-        const skillsData = {
-            normalized_skill_set: Array.from(normalizedSkillSet),
-            skill_frequency: skillFrequency,
-            skill_categories: skillCategories,
-            skills_string: Array.from(normalizedSkillSet).join(", ")
-        };
+            const employment = {
+                current_role: workEntries[0]?.position || basics.label || "",
+                current_company: workEntries[0]?.name || "",
+                years_total: Math.round(totalMonths / 12),
+                roles_by_year: rolesByYear,
+                history: workEntries
+            };
 
-        // Summaries
-        const summaryLong = basics.summary || "";
-        let summaryShort = "";
-        if (summaryLong) {
-            const firstSentence = summaryLong.split(/[.!?]/)[0];
-            summaryShort = firstSentence ? firstSentence.trim() + "." : summaryLong;
-        }
+            // 4. Skills & Reverse Maps
+            const normalizedSkillSet = new Set();
+            const skillFrequency = {};
+            const skillToYears = {};
+            const skillCategories = {};
 
-        const professionalStatement = findByPattern(basics, ["describe your relevant experiences", "industrial projects", "professional statement"]) ||
-            findByPattern(basics.experience, ["describe your relevant experiences", "industrial projects", "highlight"]);
+            skills.forEach(skillCategory => {
+                const catName = this.normalizeText(skillCategory.name);
+                skillCategories[catName] = [];
 
-        const motivation = findByPattern(basics.experience, ["multiple roles", "motivation for each", "order them", "apply to multiple"]) || "";
+                const keywords = skillCategory.keywords || [skillCategory.name];
 
+                keywords.forEach(keyword => {
+                    const normKeyword = this.normalizeText(keyword);
+                    normalizedSkillSet.add(normKeyword);
+                    skillCategories[catName].push(normKeyword);
 
-        const onsiteSunnyvale = findByPattern(basics.custom, ["sunnyvale", "on-site", "work on-site"]);
-        const aiToolExperience = findByPattern(basics.custom, ["claude", "cursor", "experience"]) ||
-            findByPattern(basics.experience, ["claude", "cursor", "experience"]);
+                    skillFrequency[normKeyword] = (skillFrequency[normKeyword] || 0) + 1;
+                    skillToYears[normKeyword] = employment.years_total;
+                });
+            });
 
-        // Output Index
-        return {
-            identity: identity,
-            contact: contact,
-            employment: employment,
-            availability: availability,
-            skills: skillsData,
-            summary: {
-                short: summaryShort,
-                long: summaryLong,
-                professional_statement: professionalStatement,
-                motivation: motivation,
-                onsite_sunnyvale: onsiteSunnyvale,
-                ai_tool_experience: aiToolExperience
-            },
-            education: (canonicalResume.education || []).map(edu => ({
-                ...edu,
-                degree: edu.studyType || edu.Discipline || "",
-                normInstitution: this.normalizeText(edu.institution),
-                normDegree: this.normalizeText(edu.studyType || edu.Discipline || ""),
-                normMajor: this.normalizeText(edu.area || "")
-            })),
-            education_flat: canonicalResume.education && canonicalResume.education[0] ? {
-                institution: canonicalResume.education[0].institution || "",
-                degree: canonicalResume.education[0].studyType || canonicalResume.education[0].Discipline || "",
-                major: canonicalResume.education[0].area || "",
-                start_date: canonicalResume.education[0].startDate || "",
-                end_date: canonicalResume.education[0].endDate || ""
-            } : {},
-            reverse_maps: {
-                skill_to_years: skillToYears,
-                company_to_duration: companyToDuration,
-                title_to_duration: titleToDuration
+            const skillsData = {
+                normalized_skill_set: Array.from(normalizedSkillSet),
+                skill_frequency: skillFrequency,
+                skill_categories: skillCategories,
+                skills_string: Array.from(normalizedSkillSet).join(", ")
+            };
+
+            // Summaries
+            const summaryLong = basics.summary || "";
+            let summaryShort = "";
+            if (summaryLong) {
+                const firstSentence = summaryLong.split(/[.!?]/)[0];
+                summaryShort = firstSentence ? firstSentence.trim() + "." : summaryLong;
             }
-        };
 
+            const professionalStatement = logistics.screening_answers?.why_good_fit ||
+                findByPattern(basics, ["describe your relevant experiences", "industrial projects", "professional statement"]) ||
+                findByPattern(basics.experience, ["describe your relevant experiences", "industrial projects", "highlight"]);
+
+            const motivation = logistics.screening_answers?.why_interested ||
+                findByPattern(basics.experience, ["multiple roles", "motivation for each", "order them", "apply to multiple"]) || "";
+
+            const onsiteSunnyvale = findByPattern(basics.custom, ["sunnyvale", "on-site", "work on-site"]);
+            const aiToolExperience = findByPattern(basics.custom, ["claude", "cursor", "experience"]) ||
+                findByPattern(basics.experience, ["claude", "cursor", "experience"]);
+
+            // Output Index
+            return {
+                identity: identity,
+                contact: contact,
+                employment: employment,
+                availability: availability,
+                skills: skillsData,
+                summary: {
+                    short: summaryShort,
+                    long: summaryLong,
+                    professional_statement: professionalStatement,
+                    motivation: motivation,
+                    onsite_sunnyvale: onsiteSunnyvale,
+                    ai_tool_experience: aiToolExperience
+                },
+                education: (canonicalResume.education || []).map(edu => ({
+                    ...edu,
+                    degree: edu.studyType || edu.Discipline || "",
+                    normInstitution: this.normalizeText(edu.institution),
+                    normDegree: this.normalizeText(edu.studyType || edu.Discipline || ""),
+                    normMajor: this.normalizeText(edu.area || "")
+                })),
+                education_flat: canonicalResume.education && canonicalResume.education[0] ? {
+                    institution: canonicalResume.education[0].institution || "",
+                    degree: canonicalResume.education[0].studyType || canonicalResume.education[0].Discipline || "",
+                    major: canonicalResume.education[0].area || "",
+                    start_date: canonicalResume.education[0].startDate || "",
+                    end_date: canonicalResume.education[0].endDate || ""
+                } : {},
+                reverse_maps: {
+                    skill_to_years: skillToYears,
+                    company_to_duration: companyToDuration,
+                    title_to_duration: titleToDuration
+                },
+                custom_fields: customFields,
+                technical_screening: technical,
+                application_logistics: logistics
+            };
+        } catch (error) {
+            console.error("[ResumeProcessor] Normalization error:", error);
+            throw new Error(`Failed to normalize resume: ${error.message}`);
+        }
     }
 
-    /**
-     * Prunes normalized resume data to remove internal maps and noise for AI prompts.
-     */
     static pruneForAi(normalizedData) {
         if (!normalizedData) return {};
         const pruned = JSON.parse(JSON.stringify(normalizedData));
@@ -548,7 +563,7 @@ class ResumeProcessor {
     }
 }
 
-// Export for use in extension (depending on environment)
+// Export for use in extension
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = ResumeProcessor;
 } else {

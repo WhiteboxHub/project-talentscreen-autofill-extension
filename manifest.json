@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "TalentScreen Autofill",
-  "version": "1.6",
-  "description": "Auto-fills job application forms using your locally stored resume data.",
-  "author": "Sampath Velupula, Ravi Kumar Rayapalli, Jafar vali, Ramana gangarao, Bavish Kangari, jatin Thakur",
+  "name": "TalentScreen - Whitebox Learning Autofill",
+  "version": "2.0.0",
+  "description": "TalentScreen - Whitebox Learning Autofill extension intelligently fills job application forms using your JSON resume data across 26+ ATS platforms.",
+  "author": "Whitebox Learning - Sampath Velupula",
+  "homepage_url": "https://chromewebstore.google.com/detail/talentscreen-autofill/bebdlhhpgmegdebdballinfmfnlpmeio",
   "permissions": [
     "storage",
     "contextMenus",
@@ -87,7 +88,10 @@
         "*://*.rippling-ats.com/*"
       ],
       "js": [
-        "src/content/resumeProcessor.js",
+        "src/core/resumeProcessor.js",
+        "src/core/formTracker.js",
+        "src/core/autofillAPI.js",
+        "src/content/trackingIntegration.js",
         "src/content/atsStrategies/genericStrategy.js",
         "src/content/atsStrategies/strategyRegistry.js",
         "src/content/atsStrategies/adpStrategy.js",
