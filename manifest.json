@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "Talentdirect Autofill",
-  "version": "1.4",
-  "description": "Auto-fills job application forms using your locally stored resume data.",
-  "author": "Sampath Velupula, Ravi Kumar Rayapalli, Jafar vali, Ramana gangarao, Bavish Kangari, jatin Thakur",
+  "name": "TalentScreen - Whitebox Learning Autofill",
+  "version": "2.0.0",
+  "description": "TalentScreen - Whitebox Learning Autofill extension intelligently fills job application forms using your JSON resume data across 26+ ATS platforms.",
+  "author": "Whitebox Learning - Sampath Velupula",
+  "homepage_url": "https://chromewebstore.google.com/detail/talentscreen-autofill/bebdlhhpgmegdebdballinfmfnlpmeio",
   "permissions": [
     "storage",
     "contextMenus",
@@ -45,13 +46,13 @@
     "*://*.rippling-ats.com/*"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "src/background/background.js"
   },
   "action": {
     "default_title": "Open side panel"
   },
   "side_panel": {
-    "default_path": "sidepanel.html"
+    "default_path": "src/ui/sidepanel.html"
   },
   "content_scripts": [
     {
@@ -87,41 +88,44 @@
         "*://*.rippling-ats.com/*"
       ],
       "js": [
-        "resumeProcessor.js",
-        "atsStrategies/genericStrategy.js",
-        "atsStrategies/strategyRegistry.js",
-        "atsStrategies/adpStrategy.js",
-        "atsStrategies/applytojobStrategy.js",
-        "atsStrategies/ashbyStrategy.js",
-        "atsStrategies/bamboohrStrategy.js",
-        "atsStrategies/brassringStrategy.js",
-        "atsStrategies/greenhouseStrategy.js",
-        "atsStrategies/icimsStrategy.js",
-        "atsStrategies/indeedStrategy.js",
-        "atsStrategies/jobviteStrategy.js",
-        "atsStrategies/leverStrategy.js",
-        "atsStrategies/linkedinStrategy.js",
-        "atsStrategies/oraclecloudStrategy.js",
-        "atsStrategies/paychexStrategy.js",
-        "atsStrategies/paycomStrategy.js",
-        "atsStrategies/personioStrategy.js",
-        "atsStrategies/recruiteeStrategy.js",
-        "atsStrategies/ripplingStrategy.js",
-        "atsStrategies/smartrecruitersStrategy.js",
-        "atsStrategies/successfactorsStrategy.js",
-        "atsStrategies/taleoStrategy.js",
-        "atsStrategies/teamtailorStrategy.js",
-        "atsStrategies/ultiproStrategy.js",
-        "atsStrategies/workableStrategy.js",
-        "atsStrategies/workdayStrategy.js",
-        "content.js"
+        "src/core/resumeProcessor.js",
+        "src/core/formTracker.js",
+        "src/core/autofillAPI.js",
+        "src/content/trackingIntegration.js",
+        "src/content/atsStrategies/genericStrategy.js",
+        "src/content/atsStrategies/strategyRegistry.js",
+        "src/content/atsStrategies/adpStrategy.js",
+        "src/content/atsStrategies/applytojobStrategy.js",
+        "src/content/atsStrategies/ashbyStrategy.js",
+        "src/content/atsStrategies/bamboohrStrategy.js",
+        "src/content/atsStrategies/brassringStrategy.js",
+        "src/content/atsStrategies/greenhouseStrategy.js",
+        "src/content/atsStrategies/icimsStrategy.js",
+        "src/content/atsStrategies/indeedStrategy.js",
+        "src/content/atsStrategies/jobviteStrategy.js",
+        "src/content/atsStrategies/leverStrategy.js",
+        "src/content/atsStrategies/linkedinStrategy.js",
+        "src/content/atsStrategies/oraclecloudStrategy.js",
+        "src/content/atsStrategies/paychexStrategy.js",
+        "src/content/atsStrategies/paycomStrategy.js",
+        "src/content/atsStrategies/personioStrategy.js",
+        "src/content/atsStrategies/recruiteeStrategy.js",
+        "src/content/atsStrategies/ripplingStrategy.js",
+        "src/content/atsStrategies/smartrecruitersStrategy.js",
+        "src/content/atsStrategies/successfactorsStrategy.js",
+        "src/content/atsStrategies/taleoStrategy.js",
+        "src/content/atsStrategies/teamtailorStrategy.js",
+        "src/content/atsStrategies/ultiproStrategy.js",
+        "src/content/atsStrategies/workableStrategy.js",
+        "src/content/atsStrategies/workdayStrategy.js",
+        "src/content/content.js"
       ],
       "all_frames": true
     }
   ],
   "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
+    "16": "assets/icons/icon16.png",
+    "48": "assets/icons/icon48.png",
+    "128": "assets/icons/icon128.png"
   }
 }
