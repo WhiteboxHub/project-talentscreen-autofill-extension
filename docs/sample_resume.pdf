@@ -1,0 +1,43 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /Resources 4 0 R /MediaBox [0 0 612 792] /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> >>
+endobj
+5 0 obj
+<< /Length 295 >>
+stream
+BT
+/F2 24 Tf
+50 720 Td
+(Alex Anderson) Tj
+/F1 12 Tf
+0 -20 Td
+(alex.anderson@example.com | 123 Fake St, Springfield, IL) Tj
+/F2 14 Tf
+0 -40 Td
+(EXPERIENCE) Tj
+/F1 12 Tf
+0 -20 Td
+(Globex Corporation - Senior Software Engineer) Tj
+0 -20 Td
+(Initech - Software Engineer) Tj
+/F2 14 Tf
+0 -40 Td
+(EDUCATION) Tj
+/F1 12 Tf
+0 -20 Td
+(University of Science - MS Computer Science) Tj
+ET
+endstream
+endobj
+trailer
+<< /Size 6 /Root 1 0 R >>
+%%EOF
