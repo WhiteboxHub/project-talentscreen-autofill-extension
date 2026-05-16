@@ -48,6 +48,8 @@ class GreenhouseStrategy extends GenericStrategy {
             await this._fillGreenhouseEducation(normalizedData);
             await this._fillCountryDropdown(normalizedData);
             await this._fillAllCustomSelects(normalizedData);
+            await this._fillEEOFields(normalizedData);
+            await this._fillApplicationQuestions(normalizedData);
         } else {
             // If still no fields, don't set this.executed = true so we can try again on next mutation
         }
@@ -248,6 +250,188 @@ class GreenhouseStrategy extends GenericStrategy {
                 this.setSelectValue(select, match.value);
             }
         });
+    }
+
+    /**
+     * Fill EEO (Equal Employment Opportunity) fields
+     * These are the diversity questions: gender, race, veteran status, disability status
+     */
+    async _fillEEOFields(normalizedData) {
+        const customFields = normalizedData.custom_fields || {};
+        const eeo = customFields.eeo || {};
+
+        // Gender
+        await this._fillRemixSelect('gender', eeo.gender || 'male', {
+            'male': 'Male',
+            'female': 'Female',
+            'non-binary': 'Non-binary',
+            'decline': 'I do not want to answer'
+        });
+
+        // Hispanic/Latino Ethnicity
+        await this._fillRemixSelect('hispanic_ethnicity', eeo.hispanic_latino || 'no', {
+            'yes': 'Yes',
+            'no': 'No',
+            'decline': 'I do not want to answer'
+        });
+
+        // Race
+        await this._fillRemixSelect('race', eeo.ethnicity || 'asian', {
+            'asian': 'Asian',
+            'black': 'Black or African American',
+            'hispanic': 'Hispanic or Latino',
+            'native': 'American Indian or Alaska Native',
+            'pacific': 'Native Hawaiian or Other Pacific Islander',
+            'white': 'White',
+            'two-or-more': 'Two or More Races',
+            'decline': 'I do not want to answer'
+        });
+
+        // Veteran Status
+        await this._fillRemixSelect('veteran_status', eeo.veteran_status || 'no', {
+            'yes': 'I identify as one or more of the classifications of protected veteran',
+            'no': 'I am not a protected veteran',
+            'decline': 'I do not want to answer'
+        });
+
+        // Disability Status
+        await this._fillRemixSelect('disability_status', eeo.disability_status || 'no', {
+            'yes': 'Yes, I have a disability (or previously had a disability)',
+            'no': 'No, I don\'t have a disability',
+            'decline': 'I do not want to answer'
+        });
+    }
+
+    /**
+     * Fill application-specific questions
+     * These vary by job posting but often include work authorization, sponsorship, etc.
+     */
+    async _fillApplicationQuestions(normalizedData) {
+        const customFields = normalizedData.custom_fields || {};
+        const legal = customFields.legal || {};
+        const contact = normalizedData.contact || {};
+
+        // LinkedIn Profile
+        const linkedinInput = document.querySelector('input[id*="linkedin"], input[aria-label*="LinkedIn"]');
+        if (linkedinInput && !linkedinInput.value && contact.linkedin) {
+            this.fillInputSafely(linkedinInput, contact.linkedin);
+        }
+
+        // City/State where working from
+        const cityInput = document.querySelector('input[aria-label*="city"], input[aria-label*="work from"]');
+        if (cityInput && !cityInput.value && contact.city) {
+            const location = contact.state ? `${contact.city}, ${contact.state}` : contact.city;
+            this.fillInputSafely(cityInput, location);
+        }
+
+        // Work Authorization - "Are you authorized to work in the U.S."
+        await this._fillRemixSelectByLabel('authorized to work', legal.work_auth_us !== undefined ? legal.work_auth_us : true, {
+            true: 'Yes',
+            false: 'No'
+        });
+
+        // Sponsorship - "Will you now or in the future require sponsorship"
+        const needsSponsorship = legal.sponsorship_required_now || legal.sponsorship_required_future || false;
+        await this._fillRemixSelectByLabel('require sponsorship', needsSponsorship, {
+            true: 'Yes',
+            false: 'No'
+        });
+
+        // Relatives at company - default to "No"
+        await this._fillRemixSelectByLabel('relatives', false, {
+            true: 'Yes',
+            false: 'No'
+        });
+    }
+
+    /**
+     * Fill a Remix/React Select dropdown by ID
+     * Remix selects have special structure with hidden input and displayed value
+     */
+    async _fillRemixSelect(fieldId, dataValue, valueMap) {
+        if (!dataValue) return;
+
+        // Find the input element
+        const input = document.querySelector(`input[id="${fieldId}"]`);
+        if (!input) return;
+
+        // Get the display text for this value
+        const displayText = valueMap[dataValue];
+        if (!displayText) return;
+
+        // Find the container with the current value display
+        const container = input.closest('.select-shell');
+        if (!container) return;
+
+        // Check if already filled
+        const singleValue = container.querySelector('.select__single-value');
+        if (singleValue && singleValue.textContent.trim() === displayText) {
+            console.log(`[Greenhouse] ${fieldId} already filled with: ${displayText}`);
+            return;
+        }
+
+        // Click to open dropdown
+        const toggleButton = container.querySelector('button[aria-label="Toggle flyout"]');
+        if (toggleButton) {
+            toggleButton.click();
+            await this.sleep(300);
+
+            // Wait for options menu to appear
+            const menu = document.querySelector('[class*="select__menu"]');
+            if (menu) {
+                // Find and click the matching option
+                const options = menu.querySelectorAll('[class*="select__option"]');
+                for (const option of options) {
+                    if (option.textContent.trim().includes(displayText) ||
+                        option.textContent.trim() === displayText) {
+                        option.click();
+                        console.log(`[Greenhouse] Filled ${fieldId} with: ${displayText}`);
+                        await this.sleep(200);
+                        return;
+                    }
+                }
+            }
+
+            // If we couldn't find the option, close the dropdown
+            if (toggleButton) toggleButton.click();
+        }
+
+        // Alternative: Try using ReactInputHelper if available
+        if (typeof ReactInputHelper !== 'undefined' && singleValue) {
+            try {
+                // Set the display value
+                const valueContainer = container.querySelector('.select__value-container');
+                if (valueContainer) {
+                    const existingValue = valueContainer.querySelector('.select__single-value');
+                    if (existingValue) {
+                        existingValue.textContent = displayText;
+                    }
+                    console.log(`[Greenhouse] Set ${fieldId} display to: ${displayText}`);
+                }
+            } catch (e) {
+                console.error(`[Greenhouse] Error filling ${fieldId}:`, e);
+            }
+        }
+    }
+
+    /**
+     * Fill a Remix select by searching for label text
+     * Useful when we don't know the exact field ID
+     */
+    async _fillRemixSelectByLabel(labelText, dataValue, valueMap) {
+        // Find label containing the text
+        const labels = Array.from(document.querySelectorAll('label.select__label'));
+        const matchingLabel = labels.find(label =>
+            label.textContent.toLowerCase().includes(labelText.toLowerCase())
+        );
+
+        if (!matchingLabel) return;
+
+        // Get the field ID from the label
+        const fieldId = matchingLabel.getAttribute('for');
+        if (fieldId) {
+            await this._fillRemixSelect(fieldId, dataValue, valueMap);
+        }
     }
 }
 
