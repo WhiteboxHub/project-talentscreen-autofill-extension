@@ -1,0 +1,59 @@
+╔═══════════════════════════════════════════════════════════════╗
+║         TALENTSCREEN COLOR SCHEME QUICK REFERENCE             ║
+╠═══════════════════════════════════════════════════════════════╣
+║                                                               ║
+║  BUTTONS:                                                     ║
+║  ────────                                                     ║
+║  🟦 Autofill Button          → Teal    #00D9A5               ║
+║  🔵 Complete Setup Button    → Indigo  #6366f1  ⭐ NEW       ║
+║  🟠 Select Resume Button     → Orange  #f59e0b  ⭐ NEW       ║
+║  🟣 PDF/DOC Upload Button    → Purple  #a855f7  ⭐ NEW       ║
+║                                                               ║
+║  WIDGETS:                                                     ║
+║  ────────                                                     ║
+║  🟠 View & Select Resume     → Orange border + Amber bg      ║
+║     (Expanded by default)       #f59e0b border               ║
+║                                 #fef3c7 background  ⭐ NEW   ║
+║                                                               ║
+║  🔵 Autofill Information     → Gradient (Indigo→Purple)      ║
+║     (Collapsible)               #e0e7ff → #f3e8ff   ⭐ NEW  ║
+║                                                               ║
+║  REMOVED:                                                     ║
+║  ────────                                                     ║
+║  ❌ Upload Resume Widget      → REMOVED                      ║
+║  ❌ Settings & Info Button    → REMOVED                      ║
+║                                                               ║
+║  FEEDBACK:                                                    ║
+║  ─────────                                                    ║
+║  📧 Email Recipients:                                         ║
+║     • sampath.velupula@gmail.com                             ║
+║     • recruiting@whitebox-learning.com                       ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
+
+SETUP VIEW ORDER:
+  1. [JSON Upload]          (Teal button)
+  2. [PDF/DOC Upload]       (Purple button) ⭐
+  3. [Complete Setup]       (Indigo button) ⭐
+
+ACTIVE VIEW ORDER:
+  1. [Autofill]             (Teal button)
+  2. [View & Select Resume] (Orange widget - BIG & EXPANDED) ⭐⭐
+     └─ [Select Different Resume] (Orange button) ⭐
+  3. [Autofill Information] (Gradient widget) ⭐
+  4. [Progress/History]     (Standard widgets)
+
+COLOR MEANINGS:
+  🟦 Teal   = Primary action (most important)
+  🔵 Indigo = Setup/completion
+  🟠 Orange = Resume management (prominent)
+  🟣 Purple = File upload
+
+VISUAL HIERARCHY:
+  Level 1: Autofill button (teal)
+  Level 2: Resume selector (orange, expanded, bordered)
+  Level 3: Info widgets (gradient)
+  Level 4: Context/history
+
+⭐ = New change
+⭐⭐ = Major new feature

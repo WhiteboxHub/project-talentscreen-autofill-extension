@@ -24,7 +24,8 @@
             autoSubmit: false,
             pauseOnLowConfidence: true,
             pauseOnMissingData: true,
-            pauseOnCAPTCHA: true
+            pauseOnCAPTCHA: true,
+            preserveUserValues: true // don't overwrite user-entered values
         },
         _customMappings: {},
         _filledFields: new Set(), // for idempotency
@@ -462,6 +463,233 @@
             };
         },
 
+        /**
+         * Phase 5: Retry failed fields
+         * @returns {Promise<Object>} Retry results
+         */
+        async retryFailed() {
+            if (!window.FormTracker) {
+                return {
+                    success: false,
+                    error: 'FormTracker not available'
+                };
+            }
+
+            const failedFields = window.FormTracker.getFailures();
+            if (failedFields.length === 0) {
+                return {
+                    success: true,
+                    message: 'No failed fields to retry',
+                    total: 0,
+                    succeeded: 0,
+                    failed: 0,
+                    fields: []
+                };
+            }
+
+            const results = {
+                success: true,
+                total: failedFields.length,
+                succeeded: 0,
+                failed: 0,
+                fields: []
+            };
+
+            for (const field of failedFields) {
+                try {
+                    const element = document.querySelector(field.selector);
+                    if (!element) {
+                        results.fields.push({
+                            ...field,
+                            status: 'failed',
+                            error: 'Element not found'
+                        });
+                        results.failed++;
+                        continue;
+                    }
+
+                    // Retry filling
+                    await this._fillField(element, field.value, field.type);
+
+                    results.fields.push({
+                        ...field,
+                        status: 'success'
+                    });
+                    results.succeeded++;
+
+                    // Update tracker
+                    window.FormTracker.markFilled(element, field.value, 'retry');
+
+                } catch (error) {
+                    results.fields.push({
+                        ...field,
+                        status: 'failed',
+                        error: error.message
+                    });
+                    results.failed++;
+                }
+            }
+
+            return results;
+        },
+
+        /**
+         * Phase 5: Get performance metrics
+         * @returns {Object} Performance data
+         */
+        getPerformanceMetrics() {
+            const result = this._lastResult;
+            if (!result) {
+                return {
+                    available: false,
+                    message: 'No autofill session available'
+                };
+            }
+
+            const session = window.FormTracker ? window.FormTracker.getCurrentSession() : null;
+
+            return {
+                available: true,
+                autofill: {
+                    totalFields: result.fields.total || 0,
+                    filled: result.fields.filled?.length || 0,
+                    skipped: result.fields.skipped?.length || 0,
+                    failed: result.fields.failed?.length || 0,
+                    successRate: result.fields.total > 0
+                        ? Math.round((result.fields.filled?.length || 0) / result.fields.total * 100)
+                        : 0,
+                    completionPercentage: result.completion?.percentage || 0
+                },
+                timing: session ? {
+                    startedAt: session.startedAt,
+                    endedAt: session.endedAt,
+                    duration: session.endedAt && session.startedAt
+                        ? new Date(session.endedAt) - new Date(session.startedAt)
+                        : null
+                } : null,
+                errors: {
+                    count: result.errors?.length || 0,
+                    messages: result.errors || []
+                },
+                warnings: {
+                    count: result.warnings?.length || 0,
+                    messages: result.warnings || []
+                }
+            };
+        },
+
+        /**
+         * Phase 5: Get field statistics
+         * @returns {Object} Field statistics
+         */
+        getFieldStatistics() {
+            const fields = this.getFields();
+
+            const stats = {
+                total: fields.length,
+                byType: {},
+                byCategory: {},
+                byStatus: {
+                    visible: 0,
+                    hidden: 0,
+                    disabled: 0,
+                    readonly: 0,
+                    required: 0
+                },
+                sensitive: {
+                    eeo: 0,
+                    legal: 0,
+                    sensitive: 0
+                }
+            };
+
+            fields.forEach(field => {
+                // Count by type
+                stats.byType[field.type] = (stats.byType[field.type] || 0) + 1;
+
+                // Count by category
+                stats.byCategory[field.category] = (stats.byCategory[field.category] || 0) + 1;
+
+                // Count by status
+                if (field.visible) stats.byStatus.visible++;
+                if (!field.visible) stats.byStatus.hidden++;
+                if (field.disabled) stats.byStatus.disabled++;
+                if (field.readonly) stats.byStatus.readonly++;
+                if (field.required) stats.byStatus.required++;
+
+                // Count sensitive fields
+                if (field.isEEO) stats.sensitive.eeo++;
+                if (field.isLegal) stats.sensitive.legal++;
+                if (field.isSensitive) stats.sensitive.sensitive++;
+            });
+
+            return stats;
+        },
+
+        /**
+         * Phase 5: Enhanced fill with options
+         * @param {Object} profile - Resume data
+         * @param {Object} options - Enhanced options
+         * @returns {Promise<Object>} Fill results
+         */
+        async fillEnhanced(profile, options = {}) {
+            // Merge with enhanced options
+            const enhancedOptions = {
+                ...options,
+                resumeFile: options.resumeFile || null,
+                overwriteExisting: options.overwriteExisting || false,
+                autoContinueOnNextPage: options.autoContinueOnNextPage || false,
+                pauseOnCaptcha: options.pauseOnCaptcha !== false,
+                performanceMode: options.performanceMode || 'balanced' // 'fast' | 'balanced' | 'careful'
+            };
+
+            // Set performance-based delay
+            const delayMap = {
+                fast: 50,
+                balanced: 100,
+                careful: 200
+            };
+            this._settings.delay = delayMap[enhancedOptions.performanceMode] || 100;
+
+            // Override user value preservation if specified
+            if (enhancedOptions.overwriteExisting) {
+                this._settings.preserveUserValues = false;
+            }
+
+            // Check for CAPTCHA if enabled
+            if (enhancedOptions.pauseOnCaptcha && window.CaptchaDetector) {
+                const captchaStatus = window.CaptchaDetector.getStatus();
+                if (captchaStatus.present && !captchaStatus.solved) {
+                    return {
+                        success: false,
+                        error: 'CAPTCHA detected and not solved',
+                        captcha: captchaStatus,
+                        message: 'Please complete the CAPTCHA before continuing'
+                    };
+                }
+            }
+
+            // Store resume file if provided
+            if (enhancedOptions.resumeFile && typeof chrome !== 'undefined' && chrome.storage) {
+                await chrome.storage.local.set({ resumeFile: enhancedOptions.resumeFile });
+            }
+
+            // Execute standard fill
+            const result = await this.fill(profile, enhancedOptions);
+
+            // Set up auto-continue if enabled
+            if (enhancedOptions.autoContinueOnNextPage && window.DynamicFormWatcher) {
+                document.addEventListener('pageChanged', async () => {
+                    console.log('[AutofillAPI] Auto-continuing on next page...');
+                    setTimeout(() => {
+                        this.fill(profile, enhancedOptions);
+                    }, 1000);
+                }, { once: true });
+            }
+
+            return result;
+        },
+
         // === INTERNAL HELPERS ===
 
         _validateAndNormalize(profile) {
@@ -676,6 +904,28 @@
         },
 
         async _fillField(element, value, type) {
+            // User Value Preservation: Check if field has existing value
+            const hasExistingValue = await this._checkUserValue(element, type);
+
+            if (hasExistingValue) {
+                const preservePreference = this._settings.preserveUserValues !== false;
+
+                if (preservePreference) {
+                    // Mark as user-filled and skip
+                    element.dataset.userFilled = 'true';
+                    console.log('[AutofillAPI] Preserving user value in field:', element.name || element.id);
+
+                    // Track as preserved
+                    if (window.TrackingIntegration) {
+                        window.TrackingIntegration.trackSkipped(element, 'user_value_preserved');
+                    }
+
+                    // Throw to mark as skipped in results
+                    throw new Error('User value preserved');
+                }
+            }
+
+            // Proceed with filling
             if (type === 'select' || type === 'select-one') {
                 element.value = value;
                 element.dispatchEvent(new Event('change', { bubbles: true }));
@@ -692,6 +942,35 @@
             }
 
             await new Promise(resolve => setTimeout(resolve, 100));
+        },
+
+        /**
+         * Check if field has user-entered value
+         * @param {HTMLElement} element
+         * @param {string} type
+         * @returns {Promise<boolean>}
+         */
+        async _checkUserValue(element, type) {
+            // Skip if explicitly marked to overwrite
+            if (element.dataset.allowOverwrite === 'true') {
+                return false;
+            }
+
+            // Check based on field type
+            if (type === 'checkbox' || type === 'radio') {
+                // For boolean fields, consider "checked" as having value
+                return element.checked === true;
+            } else if (type === 'select' || type === 'select-one') {
+                // For selects, check if non-default option selected
+                const value = element.value;
+                const firstOption = element.options[0]?.value || '';
+                return value && value !== firstOption && value !== '';
+            } else {
+                // For text inputs, check if non-empty
+                const value = element.value?.trim() || '';
+                const placeholder = element.placeholder?.trim() || '';
+                return value.length > 0 && value !== placeholder;
+            }
         },
 
         _categorizeField(element) {

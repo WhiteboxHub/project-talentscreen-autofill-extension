@@ -9,7 +9,8 @@
     "storage",
     "contextMenus",
     "sidePanel",
-    "activeTab"
+    "activeTab",
+    "tabs"
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self';"
@@ -90,7 +91,14 @@
       "js": [
         "src/core/resumeProcessor.js",
         "src/core/formTracker.js",
+        "src/core/captchaDetector.js",
+        "src/core/jobMetadataExtractor.js",
+        "src/core/reactInputHelper.js",
+        "src/core/comboboxHandler.js",
+        "src/core/mutationManager.js",
+        "src/core/autofillTelemetry.js",
         "src/core/autofillAPI.js",
+        "src/content/dynamicFormWatcher.js",
         "src/content/trackingIntegration.js",
         "src/content/atsStrategies/genericStrategy.js",
         "src/content/atsStrategies/strategyRegistry.js",
@@ -117,6 +125,7 @@
         "src/content/atsStrategies/teamtailorStrategy.js",
         "src/content/atsStrategies/ultiproStrategy.js",
         "src/content/atsStrategies/workableStrategy.js",
+        "src/content/atsStrategies/workableStrategy_v2.js",
         "src/content/atsStrategies/workdayStrategy.js",
         "src/content/content.js"
       ],

@@ -38,6 +38,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             }
         } catch (e) { sendResponse({}); }
         return true;
+    } else if (request.action === "check_progress") {
+        // Check if FormTracker has an active session with progress
+        let hasProgress = false;
+
+        if (typeof FormTracker !== 'undefined' && FormTracker.initialized) {
+            const session = FormTracker.getCurrentSession();
+            hasProgress = session && (session.fields.filled > 0 || session.fields.failed > 0);
+        } else {
+            // Fallback: check if any fields have been filled
+            const filledFields = document.querySelectorAll('input[data-autofilled], textarea[data-autofilled], select[data-autofilled]');
+            hasProgress = filledFields.length > 0;
+        }
+
+        sendResponse({ hasProgress: hasProgress });
     }
 });
 
@@ -48,6 +62,21 @@ document.addEventListener('mousedown', (e) => {
     const btn = e.target.closest('button, input[type="submit"], input[type="button"], a.btn');
     if (!btn) return;
     const txt = (btn.innerText || btn.value || "").toLowerCase();
+    const className = (btn.className || "").toLowerCase();
+    const href = (btn.getAttribute('href') || "").toLowerCase();
+
+    // Skip LinkedIn or other third-party apply buttons
+    if (txt.includes('linkedin') ||
+        txt.includes('apply with linkedin') ||
+        txt.includes('easy apply') ||
+        className.includes('linkedin') ||
+        href.includes('linkedin') ||
+        txt.includes('indeed') ||
+        className.includes('indeed')) {
+        console.log('[Content] Ignoring third-party apply button:', txt);
+        return;
+    }
+
     if (txt.includes('submit') || txt.includes('finish') || txt.includes('apply')) {
         autoFillState.submissionAttempted = true;
         if (chrome.runtime?.id) {
@@ -98,6 +127,21 @@ function showToast(msg, type = 'info') {
 }
 
 function extractJobMetadata() {
+    // Use enhanced JobMetadataExtractor if available
+    if (typeof JobMetadataExtractor !== 'undefined') {
+        const metadata = JobMetadataExtractor.extract();
+        return {
+            company: metadata.company.substring(0, 50),
+            role: metadata.jobTitle.substring(0, 70),
+            location: metadata.location,
+            jobType: metadata.jobType,
+            salary: metadata.salary,
+            // Full metadata available for advanced usage
+            full: metadata
+        };
+    }
+
+    // Fallback to simple extraction
     let company = "", role = "";
     const gC = document.querySelector('.company-name'), gR = document.querySelector('.app-title');
     if (gC) company = gC.innerText.trim(); if (gR) role = gR.innerText.trim();
@@ -130,4 +174,73 @@ function extractJobDescription() {
     // Fallback to body but try to find the largest text container
     return document.body.innerText.substring(0, 5000);
 }
+
+// ============================================
+// Phase 4: Smart Autofill Features
+// ============================================
+
+// Initialize Dynamic Form Watcher
+if (typeof DynamicFormWatcher !== 'undefined') {
+    // Wait for DOM to be ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            DynamicFormWatcher.init();
+            console.log('[Content] DynamicFormWatcher initialized');
+        });
+    } else {
+        DynamicFormWatcher.init();
+        console.log('[Content] DynamicFormWatcher initialized');
+    }
+
+    // Listen for dynamic fields detected
+    document.addEventListener('dynamicFieldsDetected', (e) => {
+        console.log('[Content] New fields detected:', e.detail.fields.length);
+        // Could trigger retry autofill for pending fields here
+    });
+
+    // Listen for dropdowns loaded
+    document.addEventListener('dropdownsLoaded', (e) => {
+        console.log('[Content] Dropdowns loaded:', e.detail.dropdowns.length);
+        // Could trigger retry for failed dropdown fills
+    });
+
+    // Listen for page change
+    document.addEventListener('pageChanged', (e) => {
+        console.log('[Content] Page changed:', e.detail.url);
+        // Reset state for new page
+        autoFillState.hasRun = false;
+    });
+
+    // Listen for auto-continue autofill (multi-step forms)
+    document.addEventListener('autoContinueAutofill', async () => {
+        console.log('[Content] Auto-continuing autofill on new page');
+        // Get stored resume data and continue filling
+        const result = await chrome.storage.local.get(['resumeData', 'normalizedData']);
+        if (result.normalizedData) {
+            fillForm(result.normalizedData, false, result.resumeFile);
+        }
+    });
+}
+
+// CAPTCHA Detection and Warning
+if (typeof CaptchaDetector !== 'undefined') {
+    // Check for CAPTCHA on page load
+    window.addEventListener('load', () => {
+        const captchaStatus = CaptchaDetector.getStatus();
+
+        if (captchaStatus.present && !captchaStatus.solved) {
+            console.warn('[Content] CAPTCHA detected:', captchaStatus.type);
+            showToast(`⚠️ ${captchaStatus.message}`, 'info');
+
+            // Notify sidepanel about CAPTCHA
+            chrome.runtime.sendMessage({
+                action: 'captcha_detected',
+                type: captchaStatus.type,
+                message: captchaStatus.message
+            });
+        }
+    });
+}
+
+console.log('[Content] Phase 4 features initialized');
 

@@ -5,6 +5,9 @@
   <meta charset="UTF-8">
   <title>TalentScreen - Whitebox Learning Autofill</title>
   <link rel="stylesheet" href="/src/ui/styles.css">
+  <link rel="stylesheet" href="/src/ui/components/confirmation-dialog.css">
+  <link rel="stylesheet" href="/src/ui/components/feedback-modal.css">
+  <link rel="stylesheet" href="/src/ui/components/resume-selector-modal.css">
 </head>
 
 <body>
@@ -12,35 +15,47 @@
     <!-- Header -->
     <div class="header">
       <div class="logo-title">
-        <img src="/assets/icons/logo_sidepanel.png" alt="TalentScreen - Whitebox Learning" title="TalentScreen - Whitebox Learning Autofill"
-          style="width: 52px; height: 52px; object-fit: contain;">
+        <img src="/assets/icons/logo_sidepanel.png" alt="TalentScreen" title="TalentScreen Autofill"
+          style="width: 48px; height: 48px; object-fit: contain; border-radius: 12px;">
         <div>
-          <h2 style="font-size: 1.4rem; margin: 0; font-weight: 800; color: var(--text);">TalentScreen</h2>
-          <p style="font-size: 0.7rem; margin: 0; color: var(--text-muted);">Whitebox Learning Autofill</p>
+          <h2 style="font-size: 1.3rem; margin: 0; font-weight: 700; color: var(--text); letter-spacing: -0.5px;">TalentScreen</h2>
+          <p style="font-size: 0.75rem; margin: 0; color: var(--text-muted); font-weight: 500;">Autofill Assistant</p>
         </div>
       </div>
+      <button id="feedbackBtn" class="icon-btn" title="Send Feedback">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+      </button>
     </div>
 
     <!-- Setup View (shown when no data) -->
     <div id="setupView" class="setup-view">
       <div class="setup-card">
-        <h3 style="margin: 0 0 8px 0; font-size: 1.1rem;">Complete Setup</h3>
-        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;">
-          Both JSON and PDF are required to start autofilling applications.
-        </p>
+        <div style="text-align: center; margin-bottom: 24px;">
+          <div style="width: 64px; height: 64px; background: var(--primary-light); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--primary);">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"></path>
+            </svg>
+          </div>
+          <h3 style="margin: 0 0 8px 0; font-size: 1.2rem; font-weight: 700; color: var(--text);">Get Started</h3>
+          <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0; line-height: 1.5;">
+            Upload your resume to start autofilling job applications
+          </p>
+        </div>
 
         <!-- JSON Upload -->
         <div class="upload-section">
           <label class="upload-label">
             <span style="color: var(--error);">*</span> 1. Resume JSON (Required)
           </label>
-          <label for="resumeInput" class="upload-btn-styled" id="jsonUploadBtn">
+          <label for="jsonInput" class="upload-btn-styled" id="jsonUploadBtn">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"></path>
             </svg>
             <span id="jsonFileName">Choose JSON File</span>
           </label>
-          <input type="file" id="resumeInput" accept=".json" class="hidden">
+          <input type="file" id="jsonInput" accept=".json" class="hidden">
           <div id="jsonStatus" class="upload-status hidden"></div>
           <p style="font-size: 0.7rem; color: var(--text-muted); margin-top: 6px;">
             Need a template?
@@ -57,7 +72,7 @@
           <label class="upload-label">
             <span style="color: var(--error);">*</span> 2. Resume PDF (Required)
           </label>
-          <input type="file" id="resumeFileInput" accept=".pdf,.doc,.docx" class="hidden">
+          <input type="file" id="pdfInput" accept=".pdf,.doc,.docx" class="hidden">
           <button id="uploadPdfBtn" class="upload-btn-styled secondary">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -78,9 +93,124 @@
       </div>
     </div>
 
+    <!-- Unsupported Page View -->
+    <div id="unsupportedView" class="unsupported-view hidden">
+      <div class="unsupported-card">
+        <div class="unsupported-icon">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M12 8v4M12 16h.01"></path>
+          </svg>
+        </div>
+        <h3 class="unsupported-title">Autofill Not Supported</h3>
+        <p class="unsupported-message">
+          Save this job in one click.<br>
+          Track this application and prepare autofill information.
+        </p>
+
+        <div class="unsupported-actions">
+          <button id="submitRequestBtn" class="action-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            Submit Request
+          </button>
+          <button id="findJobsBtn" class="secondary-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <path d="M21 21l-4.35-4.35"></path>
+            </svg>
+            Find More Jobs
+          </button>
+        </div>
+
+        <div class="unsupported-info">
+          <p class="info-text">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            This site is not yet supported. Submit a request to add support for this ATS platform.
+          </p>
+        </div>
+      </div>
+    </div>
+
     <!-- Active View (shown when data exists) -->
     <div id="activeView" class="hidden">
-      <!-- Progress Section -->
+
+      <!-- Job/Form Information Card -->
+      <div class="job-info-card" id="jobInfoCard">
+        <div class="job-info-header">
+          <div class="company-logo" id="companyLogo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="9" y1="9" x2="15" y2="9"></line>
+              <line x1="9" y1="15" x2="15" y2="15"></line>
+            </svg>
+          </div>
+          <div class="job-info-details">
+            <div class="company-name" id="companyName">Company Name</div>
+            <div class="job-title" id="jobTitle">Job Application</div>
+            <div class="job-meta" id="jobMeta">Ready to autofill</div>
+          </div>
+          <div class="match-score hidden" id="matchScore">
+            <div class="score-circle">
+              <span class="score-value">--</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Autofill Button - CENTER & KEY FUNCTION -->
+      <button id="fillFormBtn" class="action-btn autofill-btn">
+        Autofill
+      </button>
+
+      <!-- Completion Progress Widget - Below Autofill Button -->
+      <div class="widget-card completion-widget hidden" id="completionWidget">
+        <div class="completion-header">
+          <span class="completion-label">Completion</span>
+          <span class="completion-percentage" id="completionPercentage">0%</span>
+        </div>
+        <div class="completion-bar-container">
+          <div class="completion-bar" id="completionBar" style="width: 0%"></div>
+        </div>
+        <div class="completion-details" id="completionDetails">
+          <span class="completion-text" id="completionText">0 out of 0 required fields filled</span>
+        </div>
+      </div>
+
+      <!-- Secondary Actions - Below Main Button -->
+      <div style="margin-top: 20px;">
+        <button id="manageResumeBtn" class="gray-action-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </svg>
+          Manage Resume
+        </button>
+
+        <button id="viewAutofillInfoBtn" class="gray-action-btn" style="margin-top: 10px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+          Your Autofill Information
+        </button>
+      </div>
+
+      <!-- Generate Custom Resume (like Jobright) -->
+      <button class="widget-card generate-resume-btn hidden" id="generateResumeBtn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+          <path d="M2 17l10 5 10-5M2 12l10 5 10-5"></path>
+        </svg>
+        <span>Generate Custom Resume</span>
+      </button>
+
+      <!-- Progress Section (shown during autofill) -->
       <div id="progressSection" class="progress-section hidden">
         <div class="progress-info">
           <span class="progress-label">Form Progress</span>
@@ -136,40 +266,10 @@
         </div>
       </div>
 
-      <!-- Setup Success Message -->
-      <div id="setupSuccess" class="setup-message" style="margin-bottom: 16px;">
-        <div class="setup-icon"
-          style="background-color: var(--success); color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; margin-right: 8px;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="12" height="12">
-            <polyline points="20 6 9 17 4 12"></polyline>
-          </svg>
-        </div>
-        <span>Ready to autofill!</span>
-      </div>
-
-      <!-- Main Action Button -->
-      <button id="fillFormBtn" class="action-btn" style="margin-bottom: 16px;">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
-          <polyline points="9 11 12 14 22 4"></polyline>
-          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
-        </svg>
-        Autofill Form
-      </button>
-
-      <!-- Manage Information Button -->
-      <button id="manageInfoBtn" class="secondary-btn" style="margin-bottom: 12px;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-          <line x1="9" y1="9" x2="15" y2="9"></line>
-          <line x1="9" y1="15" x2="15" y2="15"></line>
-        </svg>
-        Manage Information
-      </button>
-
       <!-- Application History -->
       <div class="history-section">
         <div class="history-header">
-          <h3 style="margin: 0; font-size: 0.9rem; color: var(--text-muted);">Recent Applications</h3>
+          <h3 style="margin: 0; font-size: 0.85rem; color: var(--text); font-weight: 600;">Recent Applications</h3>
           <button id="clearHistoryBtn" class="clear-history-btn">Clear</button>
         </div>
         <div id="historyList" class="history-list-compact"></div>
@@ -234,38 +334,94 @@
             <div class="form-container">
               <!-- Personal Info Form -->
               <form id="personalForm" class="edit-form active">
+                <!-- Info Banner -->
+                <div class="info-banner">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                  </svg>
+                  <p style="margin: 0; font-size: 0.8125rem; line-height: 1.4;">
+                    Your autofill information updates automatically when you change your uploaded resume or update information in an application form.
+                  </p>
+                </div>
+
+                <!-- Name Fields -->
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>First Name <span class="required">*</span></label>
+                    <input type="text" id="edit-first-name" required>
+                  </div>
+                  <div class="form-group">
+                    <label>Middle Name</label>
+                    <input type="text" id="edit-middle-name">
+                  </div>
+                </div>
                 <div class="form-group">
-                  <label>Full Name <span class="required">*</span></label>
-                  <input type="text" id="fullName" required>
+                  <label>Last Name <span class="required">*</span></label>
+                  <input type="text" id="edit-last-name" required>
+                </div>
+
+                <!-- Contact Fields -->
+                <div class="form-group">
+                  <label>Email Address <span class="required">*</span></label>
+                  <input type="email" id="edit-email" required>
                 </div>
                 <div class="form-row">
                   <div class="form-group">
-                    <label>Email <span class="required">*</span></label>
-                    <input type="email" id="email" required>
+                    <label>Phone Type</label>
+                    <select id="edit-phone-type">
+                      <option value="mobile">Mobile</option>
+                      <option value="home">Home</option>
+                      <option value="work">Work</option>
+                    </select>
                   </div>
                   <div class="form-group">
-                    <label>Phone</label>
-                    <input type="tel" id="phone">
+                    <label>Phone <span class="required">*</span></label>
+                    <input type="tel" id="edit-phone" required>
                   </div>
+                </div>
+
+                <!-- Location Fields -->
+                <div class="form-group">
+                  <label>Country <span class="required">*</span></label>
+                  <input type="text" id="edit-country" required placeholder="United States">
                 </div>
                 <div class="form-row">
                   <div class="form-group">
-                    <label>City</label>
-                    <input type="text" id="city">
+                    <label>City <span class="required">*</span></label>
+                    <input type="text" id="edit-city" required>
                   </div>
                   <div class="form-group">
                     <label>State/Region</label>
-                    <input type="text" id="region">
+                    <input type="text" id="edit-region">
                   </div>
                 </div>
                 <div class="form-group">
+                  <label>Address Line</label>
+                  <input type="text" id="edit-address" placeholder="123 Main Street, Apt 4B">
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Postal Code</label>
+                    <input type="text" id="edit-postal-code">
+                  </div>
+                  <div class="form-group">
+                    <label>County</label>
+                    <input type="text" id="edit-county">
+                  </div>
+                </div>
+
+                <!-- Professional Links -->
+                <div class="form-group">
                   <label>LinkedIn URL</label>
-                  <input type="url" id="linkedin">
+                  <input type="url" id="edit-linkedin" placeholder="https://linkedin.com/in/yourname">
                 </div>
                 <div class="form-group">
                   <label>Professional Summary</label>
-                  <textarea id="summary" rows="4"></textarea>
+                  <textarea id="edit-summary" rows="4" placeholder="Brief professional summary..."></textarea>
                 </div>
+
                 <button type="submit" class="action-btn">Save Personal Info</button>
               </form>
 
@@ -287,7 +443,7 @@
               <form id="skillsForm" class="edit-form">
                 <div class="form-group">
                   <label>Skills (comma-separated)</label>
-                  <textarea id="skillsText" rows="6" placeholder="JavaScript, Python, React, Node.js, AWS..."></textarea>
+                  <textarea id="edit-skills" rows="6" placeholder="JavaScript, Python, React, Node.js, AWS..."></textarea>
                   <p class="form-hint">Separate each skill with a comma</p>
                 </div>
                 <button type="submit" class="action-btn">Save Skills</button>
@@ -299,7 +455,7 @@
                 <div class="form-row">
                   <div class="form-group">
                     <label>Gender</label>
-                    <select id="gender">
+                    <select id="edit-gender">
                       <option value="">Select</option>
                       <option value="male">Male</option>
                       <option value="female">Female</option>
@@ -309,7 +465,7 @@
                   </div>
                   <div class="form-group">
                     <label>Veteran Status</label>
-                    <select id="veteranStatus">
+                    <select id="edit-veteran">
                       <option value="">Select</option>
                       <option value="yes">Yes</option>
                       <option value="no">No</option>
@@ -320,17 +476,18 @@
                 <h4 style="margin: 16px 0 12px 0; font-size: 0.9rem;">Work Authorization</h4>
                 <div class="form-group">
                   <label>Authorized to work in US?</label>
-                  <select id="workAuthUs">
-                    <option value="true">Yes</option>
-                    <option value="false">No</option>
-                  </select>
+                  <input type="checkbox" id="edit-work-auth" style="width: auto; margin-right: 8px;">
+                  <span style="font-size: 0.85rem; color: var(--text-muted);">Yes, I am authorized</span>
                 </div>
                 <div class="form-group">
-                  <label>Require sponsorship?</label>
-                  <select id="sponsorshipRequired">
-                    <option value="false">No</option>
-                    <option value="true">Yes</option>
-                  </select>
+                  <label>Require sponsorship now?</label>
+                  <input type="checkbox" id="edit-sponsorship-now" style="width: auto; margin-right: 8px;">
+                  <span style="font-size: 0.85rem; color: var(--text-muted);">Yes, I need sponsorship</span>
+                </div>
+                <div class="form-group">
+                  <label>Require sponsorship in the future?</label>
+                  <input type="checkbox" id="edit-sponsorship-future" style="width: auto; margin-right: 8px;">
+                  <span style="font-size: 0.85rem; color: var(--text-muted);">Yes, I will need sponsorship</span>
                 </div>
                 <button type="submit" class="action-btn">Save Custom Fields</button>
               </form>
@@ -490,6 +647,11 @@
 
   <script src="/src/core/resumeProcessor.js"></script>
   <script src="/src/core/formTracker.js"></script>
+  <script src="/src/core/resumeManager.js"></script>
+  <script src="/src/core/settingsManager.js"></script>
+  <script src="/src/ui/components/confirmation-dialog.js"></script>
+  <script src="/src/ui/components/feedback-modal.js"></script>
+  <script src="/src/ui/components/resume-selector-modal.js"></script>
   <script src="/src/ui/sidepanel.js"></script>
 </body>
 

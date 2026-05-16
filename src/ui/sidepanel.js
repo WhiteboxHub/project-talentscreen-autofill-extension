@@ -16,6 +16,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (win && win.id) port.postMessage({ action: 'register_window', windowId: win.id });
     });
 
+    // Supported ATS platforms
+    const SUPPORTED_ATS = [
+        'greenhouse.io', 'lever.co', 'myworkdayjobs.com', 'workday.com',
+        'smartrecruiters.com', 'applytojob.com', 'ashbyhq.com', 'bamboohr.com',
+        'icims.com', 'indeed.com', 'linkedin.com', 'workable.com',
+        'taleo.net', 'successfactors.com', 'personio.com', 'recruitee.com',
+        'teamtailor.com', 'ultipro.com', 'ukg.com', 'paycomonline.net',
+        'paychex.com', 'oraclecloud.com', 'brassring.com', 'adp.com',
+        'jobvite.com', 'rippling-ats.com'
+    ];
+
     // Setup View Elements
     const setupView = document.getElementById('setupView');
     const jsonInput = document.getElementById('jsonInput');
@@ -24,10 +35,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const pdfStatus = document.getElementById('pdfStatus');
     const completeSetupBtn = document.getElementById('completeSetupBtn');
 
+    // Unsupported View Elements
+    const unsupportedView = document.getElementById('unsupportedView');
+    const submitRequestBtn = document.getElementById('submitRequestBtn');
+    const findJobsBtn = document.getElementById('findJobsBtn');
+
     // Active View Elements
     const activeView = document.getElementById('activeView');
+    const feedbackBtn = document.getElementById('feedbackBtn');
     const fillFormBtn = document.getElementById('fillFormBtn');
-    const manageInfoBtn = document.getElementById('manageInfoBtn');
     const historyList = document.getElementById('historyList');
     const clearHistoryBtn = document.getElementById('clearHistoryBtn');
     const progressSection = document.getElementById('progressSection');
@@ -71,9 +87,24 @@ document.addEventListener('DOMContentLoaded', () => {
     let setupJsonUploaded = false;
     let setupPdfUploaded = false;
 
+    // Widget elements
+    const jobInfoCard = document.getElementById('jobInfoCard');
+    const companyName = document.getElementById('companyName');
+    const jobTitle = document.getElementById('jobTitle');
+    const jobMeta = document.getElementById('jobMeta');
+    const manageResumeBtn = document.getElementById('manageResumeBtn');
+    const viewAutofillInfoBtn = document.getElementById('viewAutofillInfoBtn');
+    const completionWidget = document.getElementById('completionWidget');
+    const completionPercentage = document.getElementById('completionPercentage');
+    const completionBar = document.getElementById('completionBar');
+    const completionText = document.getElementById('completionText');
+
     // Initialize UI state
-    function init() {
+    async function init() {
         try {
+            // Migrate legacy storage if needed
+            await ResumeManager.migrateLegacy();
+
             chrome.storage.local.get(['resumeData', 'resumeFile', 'applicationHistory'], (result) => {
                 if (chrome.runtime.lastError) {
                     console.error('[Sidepanel] Storage error:', chrome.runtime.lastError);
@@ -97,22 +128,143 @@ document.addEventListener('DOMContentLoaded', () => {
     // Update UI based on data state
     function updateUI() {
         const hasData = currentResumeData !== null && currentResumeFile !== null;
+        const isSupported = checkPageSupport();
 
-        if (hasData) {
-            setupView.classList.add('hidden');
+        // Hide all views first
+        setupView.classList.add('hidden');
+        unsupportedView.classList.add('hidden');
+        activeView.classList.add('hidden');
+
+        if (!isSupported) {
+            // Show unsupported view
+            unsupportedView.classList.remove('hidden');
+        } else if (hasData) {
+            // Show active view
             activeView.classList.remove('hidden');
+            updateJobInfoCard();
+            updateResumeFileDisplay();
         } else {
+            // Show setup view
             setupView.classList.remove('hidden');
-            activeView.classList.add('hidden');
+        }
+    }
+
+    // Check if current page is supported
+    function checkPageSupport() {
+        try {
+            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                if (!tabs || !tabs[0]) return true; // Default to supported if can't check
+
+                const url = tabs[0].url;
+                if (!url) return true;
+
+                const isSupported = SUPPORTED_ATS.some(ats => url.includes(ats));
+
+                // Update UI based on support status
+                if (!isSupported && url.startsWith('http')) {
+                    // Only show unsupported for actual job sites (not chrome:// or file://)
+                    updateUIForUnsupported();
+                }
+            });
+        } catch (error) {
+            console.error('[Sidepanel] Error checking page support:', error);
+        }
+
+        return true; // Default to supported
+    }
+
+    // Update UI for unsupported page
+    function updateUIForUnsupported() {
+        setupView.classList.add('hidden');
+        activeView.classList.add('hidden');
+        unsupportedView.classList.remove('hidden');
+    }
+
+    // Update job info card with current page info
+    function updateJobInfoCard() {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (!tabs[0]) return;
+
+            const url = new URL(tabs[0].url);
+            const hostname = url.hostname.replace('www.', '');
+
+            if (companyName) {
+                companyName.textContent = hostname;
+            }
+            if (jobTitle) {
+                jobTitle.textContent = tabs[0].title.substring(0, 50) + (tabs[0].title.length > 50 ? '...' : '');
+            }
+            if (jobMeta) {
+                jobMeta.textContent = 'Ready to autofill';
+            }
+        });
+    }
+
+    // Update resume file display
+    function updateResumeFileDisplay() {
+        if (currentResumeFile && resumeFileName && resumeFileSize) {
+            resumeFileName.textContent = currentResumeFile.name;
+            const sizeKB = (currentResumeFile.size / 1024).toFixed(1);
+            resumeFileSize.textContent = `${sizeKB} KB`;
+        } else if (resumeFileName) {
+            resumeFileName.textContent = 'No file uploaded';
+            if (resumeFileSize) resumeFileSize.textContent = '';
+        }
+    }
+
+    // Initialize gray action buttons
+    function initActionButtons() {
+        // Manage Resume Button - opens resume selector modal
+        if (manageResumeBtn) {
+            manageResumeBtn.addEventListener('click', () => {
+                // Open resume selector modal
+                if (window.ResumeSelectorModal) {
+                    window.ResumeSelectorModal.show(async (result) => {
+                        if (result.action === 'add_new') {
+                            // User wants to add new resume - show setup view
+                            setupView.classList.remove('hidden');
+                            activeView.classList.add('hidden');
+                        } else if (result.applyWithoutResume) {
+                            // User chose to apply without resume
+                            showStatus('Will apply without resume file', 'info');
+                            // Clear current resume file
+                            currentResumeFile = null;
+                        } else if (result.resume) {
+                            // User selected a resume
+                            currentResumeData = result.resume.jsonData;
+                            currentResumeFile = {
+                                data: result.resume.fileData,
+                                name: result.resume.fileName,
+                                type: result.resume.fileType,
+                                size: result.resume.fileSize
+                            };
+
+                            updateResumeFileDisplay();
+                            showStatus('Resume selected: ' + result.resume.name, 'success');
+                        }
+                    });
+                }
+            });
+        }
+
+        // View Autofill Information Button - opens settings page
+        if (viewAutofillInfoBtn) {
+            viewAutofillInfoBtn.addEventListener('click', () => {
+                chrome.tabs.create({
+                    url: chrome.runtime.getURL('/src/ui/settings.html')
+                });
+            });
         }
     }
 
     // === SETUP VIEW HANDLERS ===
 
     // JSON Upload (Setup)
-    jsonInput.addEventListener('change', (event) => {
-        handleSetupJsonUpload(event.target.files[0]);
-    });
+    if (jsonInput) {
+        jsonInput.addEventListener('change', (event) => {
+            handleSetupJsonUpload(event.target.files[0]);
+        });
+    }
 
     function handleSetupJsonUpload(file) {
         if (!file) return;
@@ -159,9 +311,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // PDF Upload (Setup)
-    pdfInput.addEventListener('change', (event) => {
-        handleSetupPdfUpload(event.target.files[0]);
-    });
+    const uploadPdfBtn = document.getElementById('uploadPdfBtn');
+    if (uploadPdfBtn) {
+        uploadPdfBtn.addEventListener('click', () => {
+            pdfInput.click();
+        });
+    }
+
+    if (pdfInput) {
+        pdfInput.addEventListener('change', (event) => {
+            handleSetupPdfUpload(event.target.files[0]);
+        });
+    }
 
     function handleSetupPdfUpload(file) {
         if (!file) return;
@@ -229,7 +390,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Complete Setup Button
-    completeSetupBtn.addEventListener('click', () => {
+    if (completeSetupBtn) {
+        completeSetupBtn.addEventListener('click', async () => {
         if (!setupJsonUploaded || !setupPdfUploaded) {
             showStatus('Both JSON and PDF files are required', 'error');
             return;
@@ -238,6 +400,10 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const normalized = ResumeProcessor.normalize(currentResumeData);
 
+            // Save to multi-resume storage
+            await ResumeManager.add(currentResumeData, currentResumeFile);
+
+            // Also save to legacy storage for backward compatibility
             chrome.storage.local.set({
                 resumeData: currentResumeData,
                 normalizedData: normalized,
@@ -260,15 +426,75 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('[Sidepanel] Setup completion error:', error);
             showStatus('Failed to complete setup: ' + error.message, 'error');
         }
-    });
+        });
+    }
+
+    // === PHASE 1: FEEDBACK BUTTON ===
+
+    if (feedbackBtn) {
+        feedbackBtn.addEventListener('click', () => {
+            // Get current session data if available
+            const sessionData = FormTracker ? FormTracker.getCurrentSession() : null;
+            FeedbackModal.show(sessionData);
+        });
+    }
+
+    // === PHASE 1: UNSUPPORTED VIEW HANDLERS ===
+
+    if (submitRequestBtn) {
+        submitRequestBtn.addEventListener('click', () => {
+            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                if (!tabs || !tabs[0]) return;
+
+                const url = tabs[0].url;
+                const title = tabs[0].title;
+                const issueUrl = `https://github.com/WhiteboxHub/project-talentscreen-autofill-extension/issues/new?title=${encodeURIComponent('Add support for: ' + title)}&body=${encodeURIComponent('Please add support for this ATS platform:\n\nURL: ' + url + '\n\nAdditional details:\n')}`;
+
+                chrome.tabs.create({ url: issueUrl });
+            });
+        });
+    }
+
+    if (findJobsBtn) {
+        findJobsBtn.addEventListener('click', () => {
+            const jobBoards = [
+                'https://www.linkedin.com/jobs/',
+                'https://www.indeed.com/',
+                'https://www.glassdoor.com/Job/jobs.htm'
+            ];
+
+            // Open random job board
+            const randomBoard = jobBoards[Math.floor(Math.random() * jobBoards.length)];
+            chrome.tabs.create({ url: randomBoard });
+        });
+    }
 
     // === ACTIVE VIEW HANDLERS ===
 
-    // Fill Form button
-    fillFormBtn.addEventListener('click', () => {
+    // Fill Form button - with confirmation if progress exists
+    if (fillFormBtn) {
+        fillFormBtn.addEventListener('click', async () => {
         if (!currentResumeData) {
             showStatus('No resume data loaded', 'error');
             return;
+        }
+
+        // Check if there's existing progress
+        const hasProgress = await checkExistingProgress();
+
+        if (hasProgress) {
+            const confirmed = await ConfirmationDialog.show({
+                title: 'Autofill Again?',
+                message: 'Are you sure you want to autofill again? This will overwrite your current progress.',
+                confirmText: 'Yes, Autofill',
+                cancelText: 'Cancel',
+                dontAskAgainKey: 'dontAskAgainAutofill',
+                showDontAskAgain: true
+            });
+
+            if (!confirmed) {
+                return; // User cancelled
+            }
         }
 
         try {
@@ -312,25 +538,18 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('[Sidepanel] Fill button error:', error);
             showStatus('An error occurred: ' + error.message, 'error');
         }
-    });
+        });
+    }
 
     // === MANAGE INFORMATION DASHBOARD ===
-
-    // Open Dashboard
-    manageInfoBtn.addEventListener('click', () => {
-        if (!currentResumeData) {
-            showStatus('No resume data loaded', 'error');
-            return;
-        }
-        manageModal.classList.remove('hidden');
-        showDashboardSection('edit');
-        populateEditForms();
-    });
+    // Note: manageInfoBtn removed from UI, but dashboard still accessible via other means
 
     // Close Dashboard
-    closeModalBtn.addEventListener('click', () => {
-        manageModal.classList.add('hidden');
-    });
+    if (closeModalBtn) {
+        closeModalBtn.addEventListener('click', () => {
+            manageModal.classList.add('hidden');
+        });
+    }
 
     // Dashboard Navigation
     dashboardNavBtns.forEach(btn => {
@@ -356,6 +575,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (section === 'edit') {
             editSection.classList.remove('hidden');
             showFormSection('personal');
+            populateEditForms();
         } else if (section === 'json') {
             jsonSection.classList.remove('hidden');
         } else if (section === 'settings') {
@@ -402,14 +622,42 @@ document.addEventListener('DOMContentLoaded', () => {
         const profiles = basics.profiles || [];
         const linkedin = profiles.find(p => p.network === 'LinkedIN' || p.network === 'LinkedIn');
 
-        // Personal Info Form
-        document.getElementById('edit-name').value = basics.name || '';
-        document.getElementById('edit-email').value = basics.email || '';
-        document.getElementById('edit-phone').value = basics.phone || '';
-        document.getElementById('edit-city').value = location.city || '';
-        document.getElementById('edit-region').value = location.region || '';
-        document.getElementById('edit-linkedin').value = linkedin?.url || '';
-        document.getElementById('edit-summary').value = basics.summary || '';
+        // Parse full name into first/middle/last
+        const nameParts = (basics.name || '').trim().split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
+        const middleName = nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : '';
+
+        // Personal Info Form - safely check if elements exist
+        const firstNameEl = document.getElementById('edit-first-name');
+        const middleNameEl = document.getElementById('edit-middle-name');
+        const lastNameEl = document.getElementById('edit-last-name');
+        const emailEl = document.getElementById('edit-email');
+        const phoneTypeEl = document.getElementById('edit-phone-type');
+        const phoneEl = document.getElementById('edit-phone');
+        const countryEl = document.getElementById('edit-country');
+        const cityEl = document.getElementById('edit-city');
+        const regionEl = document.getElementById('edit-region');
+        const addressEl = document.getElementById('edit-address');
+        const postalCodeEl = document.getElementById('edit-postal-code');
+        const countyEl = document.getElementById('edit-county');
+        const linkedinEl = document.getElementById('edit-linkedin');
+        const summaryEl = document.getElementById('edit-summary');
+
+        if (firstNameEl) firstNameEl.value = firstName;
+        if (middleNameEl) middleNameEl.value = middleName;
+        if (lastNameEl) lastNameEl.value = lastName;
+        if (emailEl) emailEl.value = basics.email || '';
+        if (phoneTypeEl) phoneTypeEl.value = basics.phoneType || 'mobile';
+        if (phoneEl) phoneEl.value = basics.phone || '';
+        if (countryEl) countryEl.value = location.country || location.countryCode || '';
+        if (cityEl) cityEl.value = location.city || '';
+        if (regionEl) regionEl.value = location.region || '';
+        if (addressEl) addressEl.value = location.address || '';
+        if (postalCodeEl) postalCodeEl.value = location.postalCode || '';
+        if (countyEl) countyEl.value = location.county || '';
+        if (linkedinEl) linkedinEl.value = linkedin?.url || '';
+        if (summaryEl) summaryEl.value = basics.summary || '';
 
         // Work Experience
         populateWorkEntries();
@@ -473,10 +721,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    addWorkBtn.addEventListener('click', () => {
-        const currentCount = workEntriesContainer.querySelectorAll('.form-entry').length;
-        addWorkEntry({}, currentCount);
-    });
+    if (addWorkBtn) {
+        addWorkBtn.addEventListener('click', () => {
+            const currentCount = workEntriesContainer.querySelectorAll('.form-entry').length;
+            addWorkEntry({}, currentCount);
+        });
+    }
 
     function populateEducationEntries() {
         const education = currentResumeData.education || [];
@@ -527,15 +777,18 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    addEducationBtn.addEventListener('click', () => {
-        const currentCount = educationEntriesContainer.querySelectorAll('.form-entry').length;
-        addEducationEntry({}, currentCount);
-    });
+    if (addEducationBtn) {
+        addEducationBtn.addEventListener('click', () => {
+            const currentCount = educationEntriesContainer.querySelectorAll('.form-entry').length;
+            addEducationEntry({}, currentCount);
+        });
+    }
 
     function populateSkillsForm() {
         const skills = currentResumeData.skills || [];
         const allKeywords = skills.flatMap(s => s.keywords || []);
-        document.getElementById('edit-skills').value = allKeywords.join(', ');
+        const skillsEl = document.getElementById('edit-skills');
+        if (skillsEl) skillsEl.value = allKeywords.join(', ');
     }
 
     function populateCustomForm() {
@@ -543,29 +796,47 @@ document.addEventListener('DOMContentLoaded', () => {
         const eeo = custom.eeo || {};
         const legal = custom.legal || {};
 
-        document.getElementById('edit-gender').value = eeo.gender || '';
-        document.getElementById('edit-veteran').value = eeo.veteran_status || '';
-        document.getElementById('edit-work-auth').checked = legal.work_auth_us || false;
-        document.getElementById('edit-sponsorship-now').checked = legal.sponsorship_required_now || false;
-        document.getElementById('edit-sponsorship-future').checked = legal.sponsorship_required_future || false;
+        const genderEl = document.getElementById('edit-gender');
+        const veteranEl = document.getElementById('edit-veteran');
+        const workAuthEl = document.getElementById('edit-work-auth');
+        const sponsorshipNowEl = document.getElementById('edit-sponsorship-now');
+        const sponsorshipFutureEl = document.getElementById('edit-sponsorship-future');
+
+        if (genderEl) genderEl.value = eeo.gender || '';
+        if (veteranEl) veteranEl.value = eeo.veteran_status || '';
+        if (workAuthEl) workAuthEl.checked = legal.work_auth_us || false;
+        if (sponsorshipNowEl) sponsorshipNowEl.checked = legal.sponsorship_required_now || false;
+        if (sponsorshipFutureEl) sponsorshipFutureEl.checked = legal.sponsorship_required_future || false;
     }
 
     // Save Personal Info Form
-    personalForm.addEventListener('submit', (e) => {
+    if (personalForm) {
+        personalForm.addEventListener('submit', (e) => {
         e.preventDefault();
         try {
             if (!currentResumeData.basics) currentResumeData.basics = {};
             if (!currentResumeData.basics.location) currentResumeData.basics.location = {};
             if (!currentResumeData.basics.profiles) currentResumeData.basics.profiles = [];
 
-            currentResumeData.basics.name = document.getElementById('edit-name').value;
-            currentResumeData.basics.email = document.getElementById('edit-email').value;
-            currentResumeData.basics.phone = document.getElementById('edit-phone').value;
-            currentResumeData.basics.location.city = document.getElementById('edit-city').value;
-            currentResumeData.basics.location.region = document.getElementById('edit-region').value;
-            currentResumeData.basics.summary = document.getElementById('edit-summary').value;
+            // Construct full name from parts
+            const firstName = document.getElementById('edit-first-name')?.value || '';
+            const middleName = document.getElementById('edit-middle-name')?.value || '';
+            const lastName = document.getElementById('edit-last-name')?.value || '';
+            const fullName = [firstName, middleName, lastName].filter(p => p).join(' ');
 
-            const linkedinUrl = document.getElementById('edit-linkedin').value;
+            currentResumeData.basics.name = fullName;
+            currentResumeData.basics.email = document.getElementById('edit-email')?.value || '';
+            currentResumeData.basics.phoneType = document.getElementById('edit-phone-type')?.value || 'mobile';
+            currentResumeData.basics.phone = document.getElementById('edit-phone')?.value || '';
+            currentResumeData.basics.location.country = document.getElementById('edit-country')?.value || '';
+            currentResumeData.basics.location.city = document.getElementById('edit-city')?.value || '';
+            currentResumeData.basics.location.region = document.getElementById('edit-region')?.value || '';
+            currentResumeData.basics.location.address = document.getElementById('edit-address')?.value || '';
+            currentResumeData.basics.location.postalCode = document.getElementById('edit-postal-code')?.value || '';
+            currentResumeData.basics.location.county = document.getElementById('edit-county')?.value || '';
+            currentResumeData.basics.summary = document.getElementById('edit-summary')?.value || '';
+
+            const linkedinUrl = document.getElementById('edit-linkedin')?.value || '';
             const linkedinProfile = currentResumeData.basics.profiles.find(p => p.network === 'LinkedIN' || p.network === 'LinkedIn');
             if (linkedinProfile) {
                 linkedinProfile.url = linkedinUrl;
@@ -578,10 +849,12 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('[Sidepanel] Personal form save error:', error);
             showStatus('Failed to save: ' + error.message, 'error');
         }
-    });
+        });
+    }
 
     // Save Work Experience Form
-    workForm.addEventListener('submit', (e) => {
+    if (workForm) {
+        workForm.addEventListener('submit', (e) => {
         e.preventDefault();
         try {
             const workEntries = Array.from(workEntriesContainer.querySelectorAll('.form-entry'));
@@ -600,10 +873,12 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('[Sidepanel] Work form save error:', error);
             showStatus('Failed to save: ' + error.message, 'error');
         }
-    });
+        });
+    }
 
     // Save Education Form
-    educationForm.addEventListener('submit', (e) => {
+    if (educationForm) {
+        educationForm.addEventListener('submit', (e) => {
         e.preventDefault();
         try {
             const eduEntries = Array.from(educationEntriesContainer.querySelectorAll('.form-entry'));
@@ -622,10 +897,12 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('[Sidepanel] Education form save error:', error);
             showStatus('Failed to save: ' + error.message, 'error');
         }
-    });
+        });
+    }
 
     // Save Skills Form
-    skillsForm.addEventListener('submit', (e) => {
+    if (skillsForm) {
+        skillsForm.addEventListener('submit', (e) => {
         e.preventDefault();
         try {
             const skillsText = document.getElementById('edit-skills').value;
@@ -641,10 +918,12 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('[Sidepanel] Skills form save error:', error);
             showStatus('Failed to save: ' + error.message, 'error');
         }
-    });
+        });
+    }
 
     // Save Custom Fields Form
-    customForm.addEventListener('submit', (e) => {
+    if (customForm) {
+        customForm.addEventListener('submit', (e) => {
         e.preventDefault();
         try {
             if (!currentResumeData.custom_fields) currentResumeData.custom_fields = {};
@@ -662,13 +941,16 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('[Sidepanel] Custom form save error:', error);
             showStatus('Failed to save: ' + error.message, 'error');
         }
-    });
+        });
+    }
 
     // === UPDATE JSON SECTION ===
 
-    updateJsonInput.addEventListener('change', (event) => {
-        handleUpdateJson(event.target.files[0]);
-    });
+    if (updateJsonInput) {
+        updateJsonInput.addEventListener('change', (event) => {
+            handleUpdateJson(event.target.files[0]);
+        });
+    }
 
     function handleUpdateJson(file) {
         if (!file) return;
@@ -699,9 +981,11 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsText(file);
     }
 
-    updatePdfInput.addEventListener('change', (event) => {
-        handleUpdatePdf(event.target.files[0]);
-    });
+    if (updatePdfInput) {
+        updatePdfInput.addEventListener('change', (event) => {
+            handleUpdatePdf(event.target.files[0]);
+        });
+    }
 
     function handleUpdatePdf(file) {
         if (!file) return;
@@ -751,7 +1035,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // === SETTINGS SECTION ===
 
-    deleteProfileBtn.addEventListener('click', () => {
+    if (deleteProfileBtn) {
+        deleteProfileBtn.addEventListener('click', () => {
         if (confirm('Are you sure you want to delete all resume data? This will return you to the setup screen.')) {
             try {
                 chrome.storage.local.set({
@@ -780,9 +1065,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 showStatus('Failed to delete data: ' + error.message, 'error');
             }
         }
-    });
+        });
+    }
 
     // === HELPER FUNCTIONS ===
+
+    // Check if there's existing autofill progress on current page
+    async function checkExistingProgress() {
+        return new Promise((resolve) => {
+            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                if (!tabs || !tabs[0]) {
+                    resolve(false);
+                    return;
+                }
+
+                chrome.tabs.sendMessage(tabs[0].id, { action: 'check_progress' }, (response) => {
+                    if (chrome.runtime.lastError) {
+                        resolve(false);
+                        return;
+                    }
+
+                    // Check if FormTracker has active session with progress
+                    resolve(response && response.hasProgress);
+                });
+            });
+        });
+    }
 
     function saveResumeData(successMessage = 'Resume saved!') {
         try {
@@ -875,7 +1183,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    clearHistoryBtn.addEventListener('click', () => {
+    if (clearHistoryBtn) {
+        clearHistoryBtn.addEventListener('click', () => {
         if (confirm('Clear all application history?')) {
             try {
                 applicationHistory = [];
@@ -892,7 +1201,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 showStatus('Failed to clear history: ' + error.message, 'error');
             }
         }
-    });
+        });
+    }
 
     // === PROGRESS TRACKING ===
 
@@ -1003,6 +1313,31 @@ document.addEventListener('DOMContentLoaded', () => {
         if (trackingCompletion) {
             trackingCompletion.textContent = `${percentage}%`;
         }
+
+        // Update completion widget
+        updateCompletionWidget(filled, total, percentage);
+    }
+
+    // Update completion widget
+    function updateCompletionWidget(filled, total, percentage) {
+        if (!completionWidget) return;
+
+        if (total > 0) {
+            completionWidget.classList.remove('hidden');
+
+            if (completionPercentage) {
+                completionPercentage.textContent = `${percentage}%`;
+            }
+
+            if (completionBar) {
+                completionBar.style.width = `${percentage}%`;
+            }
+
+            if (completionText) {
+                const required = total; // Assuming all detected fields are required for now
+                completionText.textContent = `${filled} out of ${required} required fields filled`;
+            }
+        }
     }
 
     function handleSessionStarted(session) {
@@ -1050,7 +1385,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // View Fields button - opens dashboard tracking tab
     if (viewFieldsBtn) {
         viewFieldsBtn.addEventListener('click', () => {
-            manageModal.classList.remove('hidden');
+            if (manageModal) manageModal.classList.remove('hidden');
             showDashboardSection('tracking');
             loadTrackingData();
         });
@@ -1059,10 +1394,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load tracking data when tracking section is shown
     function loadTrackingData() {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            if (!tabs[0]) return;
+            if (!tabs || !tabs[0]) {
+                console.warn('[Sidepanel] No active tab for tracking data');
+                return;
+            }
 
             chrome.tabs.sendMessage(tabs[0].id, { action: 'get_tracking_data' }, (response) => {
-                if (chrome.runtime.lastError || !response) return;
+                if (chrome.runtime.lastError) {
+                    console.warn('[Sidepanel] Could not get tracking data:', chrome.runtime.lastError);
+                    return;
+                }
+
+                if (!response) {
+                    console.warn('[Sidepanel] No tracking data response');
+                    return;
+                }
 
                 renderFieldStates(response.fieldStates || []);
                 renderFailedFields(response.failures || []);
@@ -1285,7 +1631,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }, type === 'error' ? 5000 : 3000);
     }
 
+    // Handle change resume button - opens settings to files section
+    const changeResumeBtn = document.getElementById('changeResumeBtn');
+    if (changeResumeBtn) {
+        changeResumeBtn.addEventListener('click', () => {
+            chrome.tabs.create({
+                url: chrome.runtime.getURL('/src/ui/settings.html#files')
+            });
+        });
+    }
+
     // === INITIALIZE ===
     init();
     loadTrackingHistory();
+    initActionButtons();
 });

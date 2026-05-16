@@ -1,0 +1,32 @@
+# Node modules
+node_modules/
+
+# Build artifacts
+dist/
+build/
+*.zip
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+
+# Extension artifacts
+web-ext-artifacts/
+
+# Claude Code
+.claude/
+

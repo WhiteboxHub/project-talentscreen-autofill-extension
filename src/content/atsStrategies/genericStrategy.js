@@ -229,14 +229,36 @@ class GenericStrategy {
         const entryBtn = visibleButtons.find(b => {
             const text = (b.innerText || b.value || b.getAttribute('aria-label') || b.textContent || "").toLowerCase().trim();
             const automationId = (b.getAttribute('data-automation-id') || "").toLowerCase();
+            const className = (b.className || "").toLowerCase();
+            const href = (b.getAttribute('href') || "").toLowerCase();
+
+            // EXCLUSION: Never click LinkedIn apply buttons
+            if (text.includes('linkedin') ||
+                text.includes('apply with linkedin') ||
+                text.includes('easy apply') ||
+                className.includes('linkedin') ||
+                href.includes('linkedin') ||
+                b.querySelector('img[alt*="linkedin" i]') ||
+                b.querySelector('svg[aria-label*="linkedin" i]')) {
+                console.log('[GenericStrategy] Skipping LinkedIn button:', text);
+                return false;
+            }
+
+            // EXCLUSION: Skip other third-party apply buttons
+            if (text.includes('indeed') ||
+                text.includes('apply with indeed') ||
+                className.includes('indeed')) {
+                console.log('[GenericStrategy] Skipping Indeed button:', text);
+                return false;
+            }
 
             // Priority 1: Clear "Apply Manually" indicators (to skip popups)
             if (text.includes('apply manually') || text.includes('fill manually') || text.includes('enter manually')) {
-                // 
+                //
                 return true;
             }
             if (automationId === 'applymanually' || automationId.includes('manual')) {
-                // 
+                //
                 return true;
             }
 

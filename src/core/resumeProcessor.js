@@ -313,12 +313,56 @@ class ResumeProcessor {
             const location = basics.location || {};
             const profiles = basics.profiles || [];
 
-            // Extract custom_fields (TalentScreen extension)
+            // Extract custom_fields (TalentScreen extension) with defaults
             const customFields = canonicalResume.custom_fields || {};
-            const eeo = customFields.eeo || {};
-            const legal = customFields.legal || {};
-            const technical = customFields.technical_screening || {};
-            const logistics = customFields.application_logistics || {};
+
+            // Default EEO values
+            const eeo = {
+                gender: "male",
+                ethnicity: "asian",
+                veteran_status: "no",
+                disability_status: "no",
+                lgbtq: "decline",
+                pronouns: "",
+                ...customFields.eeo
+            };
+
+            // Default legal/authorization values
+            const legal = {
+                work_auth_us: true,
+                sponsorship_required_now: false,
+                sponsorship_required_future: false,
+                security_clearance: "no",
+                visa_status: "citizen",
+                work_authorization_expiration: "n/a",
+                notice_period_days: 14,
+                ...customFields.legal
+            };
+
+            // Default technical screening values
+            const technical = {
+                years_llm: 3,
+                years_ml_deployment: 5,
+                years_python: 15,
+                years_kubernetes: 5,
+                experience_rag: true,
+                experience_agentic_ai: true,
+                highest_education: "masters",
+                ...customFields.technical_screening
+            };
+
+            // Default application logistics
+            const logistics = {
+                resume_pdf_url: "",
+                willing_to_relocate: "yes",
+                willing_to_travel: "yes",
+                screening_answers: {
+                    why_interested: "Driven by the challenge of architecting production-grade agentic workflows and scaling LLM infrastructure within enterprise environments.",
+                    why_good_fit: "Proven experience leading AI architecture at Lucid Motors and Yahoo, focusing on end-to-end MLOps and highly available distributed systems.",
+                    ...(customFields.application_logistics?.screening_answers || {})
+                },
+                ...customFields.application_logistics
+            };
 
             // 1. Identity
             const fullName = (basics.name || "").trim();
@@ -524,7 +568,12 @@ class ResumeProcessor {
                     company_to_duration: companyToDuration,
                     title_to_duration: titleToDuration
                 },
-                custom_fields: customFields,
+                custom_fields: {
+                    eeo: eeo,
+                    legal: legal,
+                    technical_screening: technical,
+                    application_logistics: logistics
+                },
                 technical_screening: technical,
                 application_logistics: logistics
             };

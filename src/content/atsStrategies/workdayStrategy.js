@@ -98,9 +98,21 @@ class WorkdayStrategy extends GenericStrategy {
             const ariaLabel = (btn.getAttribute('aria-label') || "").toLowerCase();
             const dataId = (btn.getAttribute('data-automation-id') || "").toLowerCase();
             const title = (btn.getAttribute('title') || "").toLowerCase();
+            const className = (btn.className || "").toLowerCase();
+            const href = (btn.getAttribute('href') || "").toLowerCase();
 
             // Check all possible places text could be
-            const allText = text + ' ' + ariaLabel + ' ' + dataId + ' ' + title;
+            const allText = text + ' ' + ariaLabel + ' ' + dataId + ' ' + title + ' ' + className + ' ' + href;
+
+            // EXCLUSION: Never click LinkedIn or other third-party apply buttons
+            if (allText.includes('linkedin') ||
+                allText.includes('easy apply') ||
+                allText.includes('indeed') ||
+                btn.querySelector('img[alt*="linkedin" i]') ||
+                btn.querySelector('svg[aria-label*="linkedin" i]')) {
+                console.log('[WorkdayStrategy] Skipping third-party button:', text);
+                return false;
+            }
 
             return allText.includes('apply');
         });
@@ -140,6 +152,8 @@ class WorkdayStrategy extends GenericStrategy {
             const style = window.getComputedStyle(btn);
             const bgColor = style.backgroundColor;
             const btnText = (btn.innerText || btn.textContent || "").toLowerCase().trim();
+            const className = (btn.className || "").toLowerCase();
+            const href = (btn.getAttribute('href') || "").toLowerCase();
 
             // Skip tiny buttons (likely icons or minor controls)
             const rect = btn.getBoundingClientRect();
@@ -147,6 +161,18 @@ class WorkdayStrategy extends GenericStrategy {
 
             // Skip buttons with explicit exclusion keywords
             if (btnText.includes('close') || btnText.includes('cancel') || btnText.includes('back')) continue;
+
+            // EXCLUSION: Skip LinkedIn and third-party buttons
+            if (btnText.includes('linkedin') ||
+                btnText.includes('easy apply') ||
+                btnText.includes('indeed') ||
+                className.includes('linkedin') ||
+                href.includes('linkedin') ||
+                btn.querySelector('img[alt*="linkedin" i]') ||
+                btn.querySelector('svg[aria-label*="linkedin" i]')) {
+                console.log('[WorkdayStrategy] Skipping third-party CTA button:', btnText);
+                continue;
+            }
 
             // Look for the button nearest to the job content area (usually top of page or job header)
             // Workday typically shows the Apply button in the job header
