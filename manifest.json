@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "TalentScreen - Whitebox Learning Autofill",
   "version": "2.0.0",
-  "description": "TalentScreen - Whitebox Learning Autofill extension intelligently fills job application forms using your JSON resume data across 26+ ATS platforms.",
+  "description": "Intelligently autofills job applications across 26+ ATS platforms using your JSON resume data. Save time, apply faster.",
   "author": "Whitebox Learning - Sampath Velupula",
   "homepage_url": "https://chromewebstore.google.com/detail/talentscreen-autofill/bebdlhhpgmegdebdballinfmfnlpmeio",
   "permissions": [

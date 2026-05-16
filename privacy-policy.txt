@@ -1,0 +1,139 @@
+PRIVACY POLICY
+TalentScreen Autofill Extension
+Last Updated: May 16, 2026
+
+=============================================================================
+
+QUICK SUMMARY
+
+TalentScreen Autofill Extension stores all your data locally on your device. 
+We never transmit, upload, or share your information with anyone. Your resume 
+data never leaves your computer.
+
+=============================================================================
+
+1. OVERVIEW
+
+TalentScreen Autofill Extension ("the Extension") is committed to protecting 
+your privacy. This Privacy Policy explains how we collect, use, and safeguard 
+your information when you use our Chrome extension.
+
+2. INFORMATION WE COLLECT
+
+2.1 Data You Provide:
+- Resume Data (JSON format): Name, email, phone, address, work history, 
+  education, skills, professional summary
+- Resume Files: PDF or DOC files
+- Custom Fields: EEO information, work authorization, technical screening 
+  answers, application preferences
+- Application Tracking: URLs, timestamps, status
+
+2.2 Automatically Collected Data:
+- Extension Usage: Form detection events, autofill success rates (local only)
+
+3. HOW WE STORE YOUR DATA
+
+ALL DATA IS STORED LOCALLY ON YOUR DEVICE USING CHROME'S LOCAL STORAGE API.
+
+✓ Data NEVER leaves your device
+✓ No cloud storage or external servers
+✓ No data transmission to third parties
+✓ No account creation required
+✓ You have complete control over your data
+
+4. HOW WE USE YOUR DATA
+
+Your data is used solely for:
+- Autofilling job applications
+- Application tracking
+- Settings management
+
+5. DATA SHARING
+
+WE DO NOT SHARE, SELL, RENT, OR TRANSMIT YOUR DATA TO ANY THIRD PARTIES.
+
+The Extension does NOT:
+- Upload data to external servers
+- Share data with advertisers
+- Transmit data to analytics services
+- Send data to the extension developer
+- Use tracking pixels or cookies
+
+6. CHROME PERMISSIONS EXPLAINED
+
+storage: Store resume data locally on your device
+activeTab: Detect forms on current page
+tabs: Auto-open extension on job sites
+sidePanel: Display extension interface
+contextMenus: Right-click menu access
+Host Permissions: Access 26+ ATS domains for form filling
+
+7. DATA RETENTION
+
+Your data is retained until you:
+- Manually delete it through extension settings
+- Uninstall the extension
+- Clear Chrome's extension data
+
+8. YOUR RIGHTS
+
+You have the right to:
+- Access: View all stored data in settings
+- Modify: Edit your resume data anytime
+- Delete: Remove all data by uninstalling
+- Export: Download your data (JSON)
+
+9. DATA SECURITY
+
+Security measures:
+- Local storage using Chrome's secure API
+- No external transmission
+- No backend servers
+- No stored credentials
+
+10. CHILDREN'S PRIVACY
+
+Not intended for children under 13. We do not knowingly collect information 
+from children.
+
+11. THIRD-PARTY SERVICES
+
+The Extension does NOT use any third-party services, analytics, or tracking 
+tools.
+
+12. COMPLIANCE
+
+Complies with:
+- Chrome Web Store Developer Program Policies
+- General Data Protection Regulation (GDPR)
+- California Consumer Privacy Act (CCPA)
+
+For EU Users (GDPR):
+You have full control to access, rectify, erase, restrict, port, and object 
+to processing through extension settings.
+
+For California Users (CCPA):
+You have the right to know, delete, and opt-out. Note: We do not sell data.
+
+13. CHANGES TO THIS POLICY
+
+We will notify you of changes by:
+- Updating the "Last Updated" date
+- Posting the new policy
+- Displaying notification (for significant changes)
+
+14. CONTACT US
+
+Email: sampath.velupula@gmail.com, recruiting@whitebox-learning.com
+Website: https://whitebox-learning.com
+Chrome Web Store: https://chromewebstore.google.com/detail/talentscreen-autofill/bebdlhhpgmegdebdballinfmfnlpmeio
+
+15. CONSENT
+
+By using TalentScreen Autofill Extension, you agree to this Privacy Policy. 
+If you do not agree, please do not use the Extension.
+
+=============================================================================
+
+© 2026 Whitebox Learning. All rights reserved.
+TalentScreen Autofill Extension - Version 2.0.0
