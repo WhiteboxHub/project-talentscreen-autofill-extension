@@ -92,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const companyName = document.getElementById('companyName');
     const jobTitle = document.getElementById('jobTitle');
     const jobMeta = document.getElementById('jobMeta');
-    const manageResumeBtn = document.getElementById('manageResumeBtn');
+
     const viewAutofillInfoBtn = document.getElementById('viewAutofillInfoBtn');
     const completionWidget = document.getElementById('completionWidget');
     const completionPercentage = document.getElementById('completionPercentage');
@@ -183,9 +183,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Update job info card with current page info
     function updateJobInfoCard() {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            if (!tabs[0]) return;
+            if (!tabs[0] || !tabs[0].url) return;
 
-            const url = new URL(tabs[0].url);
+            const tabUrl = tabs[0].url;
+
+            // Skip non-web pages: extension pages, mailto, about, new tab, etc.
+            // These would expose the extension ID or garbage in the company name field.
+            if (!tabUrl.startsWith('http://') && !tabUrl.startsWith('https://')) return;
+
+            const url = new URL(tabUrl);
             const hostname = url.hostname.replace('www.', '');
 
             if (companyName) {
@@ -195,7 +201,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 jobTitle.textContent = tabs[0].title.substring(0, 50) + (tabs[0].title.length > 50 ? '...' : '');
             }
             if (jobMeta) {
-                jobMeta.textContent = 'Ready to autofill';
+                const isOptimized = SUPPORTED_ATS.some(ats => tabUrl.includes(ats));
+                jobMeta.innerHTML = isOptimized
+                    ? '<span style="color: #10b981; font-weight: 600;">✓ Optimized ATS Platform</span>'
+                    : '<span style="color: #6366f1; font-weight: 600;">⚡ Smart Heuristics Active</span>';
             }
         });
     }
@@ -214,39 +223,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialize gray action buttons
     function initActionButtons() {
-        // Manage Resume Button - opens resume selector modal
-        if (manageResumeBtn) {
-            manageResumeBtn.addEventListener('click', () => {
-                // Open resume selector modal
-                if (window.ResumeSelectorModal) {
-                    window.ResumeSelectorModal.show(async (result) => {
-                        if (result.action === 'add_new') {
-                            // User wants to add new resume - show setup view
-                            setupView.classList.remove('hidden');
-                            activeView.classList.add('hidden');
-                        } else if (result.applyWithoutResume) {
-                            // User chose to apply without resume
-                            showStatus('Will apply without resume file', 'info');
-                            // Clear current resume file
-                            currentResumeFile = null;
-                        } else if (result.resume) {
-                            // User selected a resume
-                            currentResumeData = result.resume.jsonData;
-                            currentResumeFile = {
-                                data: result.resume.fileData,
-                                name: result.resume.fileName,
-                                type: result.resume.fileType,
-                                size: result.resume.fileSize
-                            };
-
-                            updateResumeFileDisplay();
-                            showStatus('Resume selected: ' + result.resume.name, 'success');
-                        }
-                    });
-                }
-            });
-        }
-
         // View Autofill Information Button - opens settings page
         if (viewAutofillInfoBtn) {
             viewAutofillInfoBtn.addEventListener('click', () => {
@@ -392,40 +368,40 @@ document.addEventListener('DOMContentLoaded', () => {
     // Complete Setup Button
     if (completeSetupBtn) {
         completeSetupBtn.addEventListener('click', async () => {
-        if (!setupJsonUploaded || !setupPdfUploaded) {
-            showStatus('Both JSON and PDF files are required', 'error');
-            return;
-        }
+            if (!setupJsonUploaded || !setupPdfUploaded) {
+                showStatus('Both JSON and PDF files are required', 'error');
+                return;
+            }
 
-        try {
-            const normalized = ResumeProcessor.normalize(currentResumeData);
+            try {
+                const normalized = ResumeProcessor.normalize(currentResumeData);
 
-            // Save to multi-resume storage
-            await ResumeManager.add(currentResumeData, currentResumeFile);
+                // Save to multi-resume storage
+                await ResumeManager.add(currentResumeData, currentResumeFile);
 
-            // Also save to legacy storage for backward compatibility
-            chrome.storage.local.set({
-                resumeData: currentResumeData,
-                normalizedData: normalized,
-                resumeFile: currentResumeFile
-            }, () => {
-                if (chrome.runtime.lastError) {
-                    console.error('[Sidepanel] Storage error:', chrome.runtime.lastError);
-                    showStatus('Failed to save: ' + chrome.runtime.lastError.message, 'error');
-                    return;
-                }
+                // Also save to legacy storage for backward compatibility
+                chrome.storage.local.set({
+                    resumeData: currentResumeData,
+                    normalizedData: normalized,
+                    resumeFile: currentResumeFile
+                }, () => {
+                    if (chrome.runtime.lastError) {
+                        console.error('[Sidepanel] Storage error:', chrome.runtime.lastError);
+                        showStatus('Failed to save: ' + chrome.runtime.lastError.message, 'error');
+                        return;
+                    }
 
-                setupJsonUploaded = false;
-                setupPdfUploaded = false;
-                jsonStatus.classList.add('hidden');
-                pdfStatus.classList.add('hidden');
-                updateUI();
-                showStatus('Setup complete! Ready to autofill.', 'success');
-            });
-        } catch (error) {
-            console.error('[Sidepanel] Setup completion error:', error);
-            showStatus('Failed to complete setup: ' + error.message, 'error');
-        }
+                    setupJsonUploaded = false;
+                    setupPdfUploaded = false;
+                    jsonStatus.classList.add('hidden');
+                    pdfStatus.classList.add('hidden');
+                    updateUI();
+                    showStatus('Setup complete! Ready to autofill.', 'success');
+                });
+            } catch (error) {
+                console.error('[Sidepanel] Setup completion error:', error);
+                showStatus('Failed to complete setup: ' + error.message, 'error');
+            }
         });
     }
 
@@ -474,70 +450,70 @@ document.addEventListener('DOMContentLoaded', () => {
     // Fill Form button - with confirmation if progress exists
     if (fillFormBtn) {
         fillFormBtn.addEventListener('click', async () => {
-        if (!currentResumeData) {
-            showStatus('No resume data loaded', 'error');
-            return;
-        }
-
-        // Check if there's existing progress
-        const hasProgress = await checkExistingProgress();
-
-        if (hasProgress) {
-            const confirmed = await ConfirmationDialog.show({
-                title: 'Autofill Again?',
-                message: 'Are you sure you want to autofill again? This will overwrite your current progress.',
-                confirmText: 'Yes, Autofill',
-                cancelText: 'Cancel',
-                dontAskAgainKey: 'dontAskAgainAutofill',
-                showDontAskAgain: true
-            });
-
-            if (!confirmed) {
-                return; // User cancelled
+            if (!currentResumeData) {
+                showStatus('No resume data loaded', 'error');
+                return;
             }
-        }
 
-        try {
-            chrome.storage.local.get(['resumeFile'], (storage) => {
-                if (chrome.runtime.lastError) {
-                    console.error('[Sidepanel] Storage error:', chrome.runtime.lastError);
-                    showStatus('Failed to retrieve data', 'error');
-                    return;
+            // Check if there's existing progress
+            const hasProgress = await checkExistingProgress();
+
+            if (hasProgress) {
+                const confirmed = await ConfirmationDialog.show({
+                    title: 'Autofill Again?',
+                    message: 'Are you sure you want to autofill again? This will overwrite your current progress.',
+                    confirmText: 'Yes, Autofill',
+                    cancelText: 'Cancel',
+                    dontAskAgainKey: 'dontAskAgainAutofill',
+                    showDontAskAgain: true
+                });
+
+                if (!confirmed) {
+                    return; // User cancelled
                 }
+            }
 
-                chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                    const activeTabId = tabs[0]?.id;
-                    if (!activeTabId) {
-                        showStatus('No active tab found', 'error');
+            try {
+                chrome.storage.local.get(['resumeFile'], (storage) => {
+                    if (chrome.runtime.lastError) {
+                        console.error('[Sidepanel] Storage error:', chrome.runtime.lastError);
+                        showStatus('Failed to retrieve data', 'error');
                         return;
                     }
 
-                    try {
-                        const normalized = ResumeProcessor.normalize(currentResumeData);
-                        chrome.tabs.sendMessage(activeTabId, {
-                            action: "fill_form",
-                            data: currentResumeData,
-                            normalizedData: normalized,
-                            resumeFile: storage.resumeFile,
-                            manual: true
-                        }, (response) => {
-                            if (chrome.runtime.lastError) {
-                                console.error('[Sidepanel] Message error:', chrome.runtime.lastError);
-                                showStatus('Could not reach page. Try reloading the page.', 'error');
-                            } else {
-                                showStatus('Autofill initiated!', 'success');
-                            }
-                        });
-                    } catch (error) {
-                        console.error('[Sidepanel] Fill error:', error);
-                        showStatus('Failed to initiate autofill: ' + error.message, 'error');
-                    }
+                    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                        const activeTabId = tabs[0]?.id;
+                        if (!activeTabId) {
+                            showStatus('No active tab found', 'error');
+                            return;
+                        }
+
+                        try {
+                            const normalized = ResumeProcessor.normalize(currentResumeData);
+                            chrome.tabs.sendMessage(activeTabId, {
+                                action: "fill_form",
+                                data: currentResumeData,
+                                normalizedData: normalized,
+                                resumeFile: storage.resumeFile,
+                                manual: true
+                            }, (response) => {
+                                if (chrome.runtime.lastError) {
+                                    console.error('[Sidepanel] Message error:', chrome.runtime.lastError);
+                                    showStatus('Could not reach page. Try reloading the page.', 'error');
+                                } else {
+                                    showStatus('Autofill initiated!', 'success');
+                                }
+                            });
+                        } catch (error) {
+                            console.error('[Sidepanel] Fill error:', error);
+                            showStatus('Failed to initiate autofill: ' + error.message, 'error');
+                        }
+                    });
                 });
-            });
-        } catch (error) {
-            console.error('[Sidepanel] Fill button error:', error);
-            showStatus('An error occurred: ' + error.message, 'error');
-        }
+            } catch (error) {
+                console.error('[Sidepanel] Fill button error:', error);
+                showStatus('An error occurred: ' + error.message, 'error');
+            }
         });
     }
 
@@ -812,135 +788,135 @@ document.addEventListener('DOMContentLoaded', () => {
     // Save Personal Info Form
     if (personalForm) {
         personalForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        try {
-            if (!currentResumeData.basics) currentResumeData.basics = {};
-            if (!currentResumeData.basics.location) currentResumeData.basics.location = {};
-            if (!currentResumeData.basics.profiles) currentResumeData.basics.profiles = [];
+            e.preventDefault();
+            try {
+                if (!currentResumeData.basics) currentResumeData.basics = {};
+                if (!currentResumeData.basics.location) currentResumeData.basics.location = {};
+                if (!currentResumeData.basics.profiles) currentResumeData.basics.profiles = [];
 
-            // Construct full name from parts
-            const firstName = document.getElementById('edit-first-name')?.value || '';
-            const middleName = document.getElementById('edit-middle-name')?.value || '';
-            const lastName = document.getElementById('edit-last-name')?.value || '';
-            const fullName = [firstName, middleName, lastName].filter(p => p).join(' ');
+                // Construct full name from parts
+                const firstName = document.getElementById('edit-first-name')?.value || '';
+                const middleName = document.getElementById('edit-middle-name')?.value || '';
+                const lastName = document.getElementById('edit-last-name')?.value || '';
+                const fullName = [firstName, middleName, lastName].filter(p => p).join(' ');
 
-            currentResumeData.basics.name = fullName;
-            currentResumeData.basics.email = document.getElementById('edit-email')?.value || '';
-            currentResumeData.basics.phoneType = document.getElementById('edit-phone-type')?.value || 'mobile';
-            currentResumeData.basics.phone = document.getElementById('edit-phone')?.value || '';
-            currentResumeData.basics.location.country = document.getElementById('edit-country')?.value || '';
-            currentResumeData.basics.location.city = document.getElementById('edit-city')?.value || '';
-            currentResumeData.basics.location.region = document.getElementById('edit-region')?.value || '';
-            currentResumeData.basics.location.address = document.getElementById('edit-address')?.value || '';
-            currentResumeData.basics.location.postalCode = document.getElementById('edit-postal-code')?.value || '';
-            currentResumeData.basics.location.county = document.getElementById('edit-county')?.value || '';
-            currentResumeData.basics.summary = document.getElementById('edit-summary')?.value || '';
+                currentResumeData.basics.name = fullName;
+                currentResumeData.basics.email = document.getElementById('edit-email')?.value || '';
+                currentResumeData.basics.phoneType = document.getElementById('edit-phone-type')?.value || 'mobile';
+                currentResumeData.basics.phone = document.getElementById('edit-phone')?.value || '';
+                currentResumeData.basics.location.country = document.getElementById('edit-country')?.value || '';
+                currentResumeData.basics.location.city = document.getElementById('edit-city')?.value || '';
+                currentResumeData.basics.location.region = document.getElementById('edit-region')?.value || '';
+                currentResumeData.basics.location.address = document.getElementById('edit-address')?.value || '';
+                currentResumeData.basics.location.postalCode = document.getElementById('edit-postal-code')?.value || '';
+                currentResumeData.basics.location.county = document.getElementById('edit-county')?.value || '';
+                currentResumeData.basics.summary = document.getElementById('edit-summary')?.value || '';
 
-            const linkedinUrl = document.getElementById('edit-linkedin')?.value || '';
-            const linkedinProfile = currentResumeData.basics.profiles.find(p => p.network === 'LinkedIN' || p.network === 'LinkedIn');
-            if (linkedinProfile) {
-                linkedinProfile.url = linkedinUrl;
-            } else if (linkedinUrl) {
-                currentResumeData.basics.profiles.push({ network: 'LinkedIN', url: linkedinUrl });
+                const linkedinUrl = document.getElementById('edit-linkedin')?.value || '';
+                const linkedinProfile = currentResumeData.basics.profiles.find(p => p.network === 'LinkedIN' || p.network === 'LinkedIn');
+                if (linkedinProfile) {
+                    linkedinProfile.url = linkedinUrl;
+                } else if (linkedinUrl) {
+                    currentResumeData.basics.profiles.push({ network: 'LinkedIN', url: linkedinUrl });
+                }
+
+                saveResumeData('Personal information updated!');
+            } catch (error) {
+                console.error('[Sidepanel] Personal form save error:', error);
+                showStatus('Failed to save: ' + error.message, 'error');
             }
-
-            saveResumeData('Personal information updated!');
-        } catch (error) {
-            console.error('[Sidepanel] Personal form save error:', error);
-            showStatus('Failed to save: ' + error.message, 'error');
-        }
         });
     }
 
     // Save Work Experience Form
     if (workForm) {
         workForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        try {
-            const workEntries = Array.from(workEntriesContainer.querySelectorAll('.form-entry'));
-            currentResumeData.work = workEntries.map(entry => {
-                return {
-                    name: entry.querySelector('.work-company').value,
-                    position: entry.querySelector('.work-position').value,
-                    startDate: entry.querySelector('.work-start').value,
-                    endDate: entry.querySelector('.work-end').value,
-                    summary: entry.querySelector('.work-summary').value
-                };
-            }).filter(job => job.name || job.position);
+            e.preventDefault();
+            try {
+                const workEntries = Array.from(workEntriesContainer.querySelectorAll('.form-entry'));
+                currentResumeData.work = workEntries.map(entry => {
+                    return {
+                        name: entry.querySelector('.work-company').value,
+                        position: entry.querySelector('.work-position').value,
+                        startDate: entry.querySelector('.work-start').value,
+                        endDate: entry.querySelector('.work-end').value,
+                        summary: entry.querySelector('.work-summary').value
+                    };
+                }).filter(job => job.name || job.position);
 
-            saveResumeData('Work experience updated!');
-        } catch (error) {
-            console.error('[Sidepanel] Work form save error:', error);
-            showStatus('Failed to save: ' + error.message, 'error');
-        }
+                saveResumeData('Work experience updated!');
+            } catch (error) {
+                console.error('[Sidepanel] Work form save error:', error);
+                showStatus('Failed to save: ' + error.message, 'error');
+            }
         });
     }
 
     // Save Education Form
     if (educationForm) {
         educationForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        try {
-            const eduEntries = Array.from(educationEntriesContainer.querySelectorAll('.form-entry'));
-            currentResumeData.education = eduEntries.map(entry => {
-                return {
-                    institution: entry.querySelector('.edu-institution').value,
-                    studyType: entry.querySelector('.edu-degree').value,
-                    area: entry.querySelector('.edu-area').value,
-                    startDate: entry.querySelector('.edu-start').value,
-                    endDate: entry.querySelector('.edu-end').value
-                };
-            }).filter(edu => edu.institution || edu.studyType);
+            e.preventDefault();
+            try {
+                const eduEntries = Array.from(educationEntriesContainer.querySelectorAll('.form-entry'));
+                currentResumeData.education = eduEntries.map(entry => {
+                    return {
+                        institution: entry.querySelector('.edu-institution').value,
+                        studyType: entry.querySelector('.edu-degree').value,
+                        area: entry.querySelector('.edu-area').value,
+                        startDate: entry.querySelector('.edu-start').value,
+                        endDate: entry.querySelector('.edu-end').value
+                    };
+                }).filter(edu => edu.institution || edu.studyType);
 
-            saveResumeData('Education updated!');
-        } catch (error) {
-            console.error('[Sidepanel] Education form save error:', error);
-            showStatus('Failed to save: ' + error.message, 'error');
-        }
+                saveResumeData('Education updated!');
+            } catch (error) {
+                console.error('[Sidepanel] Education form save error:', error);
+                showStatus('Failed to save: ' + error.message, 'error');
+            }
         });
     }
 
     // Save Skills Form
     if (skillsForm) {
         skillsForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        try {
-            const skillsText = document.getElementById('edit-skills').value;
-            const keywords = skillsText.split(',').map(s => s.trim()).filter(s => s);
+            e.preventDefault();
+            try {
+                const skillsText = document.getElementById('edit-skills').value;
+                const keywords = skillsText.split(',').map(s => s.trim()).filter(s => s);
 
-            currentResumeData.skills = [{
-                name: 'Skills',
-                keywords: keywords
-            }];
+                currentResumeData.skills = [{
+                    name: 'Skills',
+                    keywords: keywords
+                }];
 
-            saveResumeData('Skills updated!');
-        } catch (error) {
-            console.error('[Sidepanel] Skills form save error:', error);
-            showStatus('Failed to save: ' + error.message, 'error');
-        }
+                saveResumeData('Skills updated!');
+            } catch (error) {
+                console.error('[Sidepanel] Skills form save error:', error);
+                showStatus('Failed to save: ' + error.message, 'error');
+            }
         });
     }
 
     // Save Custom Fields Form
     if (customForm) {
         customForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        try {
-            if (!currentResumeData.custom_fields) currentResumeData.custom_fields = {};
-            if (!currentResumeData.custom_fields.eeo) currentResumeData.custom_fields.eeo = {};
-            if (!currentResumeData.custom_fields.legal) currentResumeData.custom_fields.legal = {};
+            e.preventDefault();
+            try {
+                if (!currentResumeData.custom_fields) currentResumeData.custom_fields = {};
+                if (!currentResumeData.custom_fields.eeo) currentResumeData.custom_fields.eeo = {};
+                if (!currentResumeData.custom_fields.legal) currentResumeData.custom_fields.legal = {};
 
-            currentResumeData.custom_fields.eeo.gender = document.getElementById('edit-gender').value;
-            currentResumeData.custom_fields.eeo.veteran_status = document.getElementById('edit-veteran').value;
-            currentResumeData.custom_fields.legal.work_auth_us = document.getElementById('edit-work-auth').checked;
-            currentResumeData.custom_fields.legal.sponsorship_required_now = document.getElementById('edit-sponsorship-now').checked;
-            currentResumeData.custom_fields.legal.sponsorship_required_future = document.getElementById('edit-sponsorship-future').checked;
+                currentResumeData.custom_fields.eeo.gender = document.getElementById('edit-gender').value;
+                currentResumeData.custom_fields.eeo.veteran_status = document.getElementById('edit-veteran').value;
+                currentResumeData.custom_fields.legal.work_auth_us = document.getElementById('edit-work-auth').checked;
+                currentResumeData.custom_fields.legal.sponsorship_required_now = document.getElementById('edit-sponsorship-now').checked;
+                currentResumeData.custom_fields.legal.sponsorship_required_future = document.getElementById('edit-sponsorship-future').checked;
 
-            saveResumeData('Custom fields updated!');
-        } catch (error) {
-            console.error('[Sidepanel] Custom form save error:', error);
-            showStatus('Failed to save: ' + error.message, 'error');
-        }
+                saveResumeData('Custom fields updated!');
+            } catch (error) {
+                console.error('[Sidepanel] Custom form save error:', error);
+                showStatus('Failed to save: ' + error.message, 'error');
+            }
         });
     }
 
@@ -1037,34 +1013,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (deleteProfileBtn) {
         deleteProfileBtn.addEventListener('click', () => {
-        if (confirm('Are you sure you want to delete all resume data? This will return you to the setup screen.')) {
-            try {
-                chrome.storage.local.set({
-                    resumeData: null,
-                    normalizedData: null,
-                    resumeFile: null
-                }, () => {
-                    if (chrome.runtime.lastError) {
-                        console.error('[Sidepanel] Storage error:', chrome.runtime.lastError);
-                        showStatus('Failed to clear data', 'error');
-                        return;
-                    }
+            if (confirm('Are you sure you want to delete all resume data? This will return you to the setup screen.')) {
+                try {
+                    chrome.storage.local.set({
+                        resumeData: null,
+                        normalizedData: null,
+                        resumeFile: null
+                    }, () => {
+                        if (chrome.runtime.lastError) {
+                            console.error('[Sidepanel] Storage error:', chrome.runtime.lastError);
+                            showStatus('Failed to clear data', 'error');
+                            return;
+                        }
 
-                    currentResumeData = null;
-                    currentResumeFile = null;
-                    setupJsonUploaded = false;
-                    setupPdfUploaded = false;
-                    jsonStatus.classList.add('hidden');
-                    pdfStatus.classList.add('hidden');
-                    manageModal.classList.add('hidden');
-                    updateUI();
-                    showStatus('All data deleted. Please complete setup again.', 'success');
-                });
-            } catch (error) {
-                console.error('[Sidepanel] Delete error:', error);
-                showStatus('Failed to delete data: ' + error.message, 'error');
+                        currentResumeData = null;
+                        currentResumeFile = null;
+                        setupJsonUploaded = false;
+                        setupPdfUploaded = false;
+                        jsonStatus.classList.add('hidden');
+                        pdfStatus.classList.add('hidden');
+                        manageModal.classList.add('hidden');
+                        updateUI();
+                        showStatus('All data deleted. Please complete setup again.', 'success');
+                    });
+                } catch (error) {
+                    console.error('[Sidepanel] Delete error:', error);
+                    showStatus('Failed to delete data: ' + error.message, 'error');
+                }
             }
-        }
         });
     }
 
@@ -1185,22 +1161,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (clearHistoryBtn) {
         clearHistoryBtn.addEventListener('click', () => {
-        if (confirm('Clear all application history?')) {
-            try {
-                applicationHistory = [];
-                chrome.storage.local.set({ applicationHistory: [] }, () => {
-                    if (chrome.runtime.lastError) {
-                        showStatus('Failed to clear history', 'error');
-                        return;
-                    }
-                    renderHistory();
-                    showStatus('History cleared', 'success');
-                });
-            } catch (error) {
-                console.error('[Sidepanel] Clear history error:', error);
-                showStatus('Failed to clear history: ' + error.message, 'error');
+            if (confirm('Clear all application history?')) {
+                try {
+                    applicationHistory = [];
+                    chrome.storage.local.set({ applicationHistory: [] }, () => {
+                        if (chrome.runtime.lastError) {
+                            showStatus('Failed to clear history', 'error');
+                            return;
+                        }
+                        renderHistory();
+                        showStatus('History cleared', 'success');
+                    });
+                } catch (error) {
+                    console.error('[Sidepanel] Clear history error:', error);
+                    showStatus('Failed to clear history: ' + error.message, 'error');
+                }
             }
-        }
         });
     }
 
@@ -1607,7 +1583,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load tracking history when dashboard opens to tracking tab
     const originalShowDashboardSection = showDashboardSection;
-    showDashboardSection = function(section) {
+    showDashboardSection = function (section) {
         originalShowDashboardSection(section);
         if (section === 'tracking') {
             loadTrackingData();
