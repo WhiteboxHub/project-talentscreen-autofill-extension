@@ -6,6 +6,7 @@
 const FeedbackModal = {
   currentModal: null,
   sessionData: null,
+  selectedRating: null,   // tracks the currently selected rating value
 
   /**
    * Show feedback modal
@@ -37,17 +38,15 @@ const FeedbackModal = {
               How would you rate your overall experience with our Autofill Plugin?
               <span class="required">*</span>
             </label>
+            <input type="hidden" id="ratingValue" name="rating">
             <div class="rating-scale">
               <div class="rating-labels">
                 <span class="rating-label-left">Not Satisfied</span>
                 <span class="rating-label-right">Very Satisfied</span>
               </div>
-              <div class="rating-options">
-                ${Array.from({ length: 11 }, (_, i) => `
-                  <label class="rating-option">
-                    <input type="radio" name="rating" value="${i}" required>
-                    <span class="rating-number">${i}</span>
-                  </label>
+              <div class="rating-options" id="ratingOptions">
+                ${Array.from({ length: 5 }, (_, i) => `
+                  <button type="button" class="rating-btn" data-value="${i + 1}">${i + 1}</button>
                 `).join('')}
               </div>
             </div>
@@ -140,7 +139,8 @@ const FeedbackModal = {
     const cancelBtn = modal.querySelector('#feedbackCancelBtn');
     const doneBtn = modal.querySelector('#feedbackDoneBtn');
     const form = modal.querySelector('#feedbackForm');
-    const overlay = modal.querySelector('.feedback-modal-overlay');
+    // modal IS the overlay div — query the inner modal card for click-outside
+    const innerCard = modal.querySelector('.feedback-modal');
 
     // Close handlers
     const handleClose = () => this.hide();
@@ -148,9 +148,9 @@ const FeedbackModal = {
     cancelBtn.addEventListener('click', handleClose);
     if (doneBtn) doneBtn.addEventListener('click', handleClose);
 
-    // Close on overlay click
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) {
+    // Close on overlay click (click outside the inner card)
+    modal.addEventListener('click', (e) => {
+      if (!innerCard.contains(e.target)) {
         handleClose();
       }
     });
@@ -169,14 +169,23 @@ const FeedbackModal = {
       this._handleSubmit(form);
     });
 
-    // Rating selection highlighting
-    const ratingInputs = modal.querySelectorAll('input[name="rating"]');
-    ratingInputs.forEach(input => {
-      input.addEventListener('change', () => {
-        ratingInputs.forEach(r => {
-          r.closest('.rating-option').classList.remove('selected');
-        });
-        input.closest('.rating-option').classList.add('selected');
+    // ── Rating button selection ──────────────────────────────────────────────
+    // Use mousedown (fires before click/submit) so the selection is always
+    // registered before any form event. stopPropagation prevents bubbling to
+    // the overlay close handler.
+    const ratingBtns = modal.querySelectorAll('.rating-btn');
+    const ratingValue = modal.querySelector('#ratingValue');
+    this.selectedRating = null; // reset on each modal open
+
+    ratingBtns.forEach(btn => {
+      btn.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        // Deselect all, then select this one
+        ratingBtns.forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        // Store in both the hidden input and module state
+        this.selectedRating = btn.dataset.value;
+        ratingValue.value = btn.dataset.value;
       });
     });
   },
@@ -187,8 +196,19 @@ const FeedbackModal = {
   async _handleSubmit(form) {
     const formData = new FormData(form);
 
-    // Collect rating
-    const rating = formData.get('rating');
+    // Collect rating — prefer module state (mousedown sets it first)
+    const rating = this.selectedRating || formData.get('rating');
+
+    // Guard: require a rating before submitting
+    if (!rating) {
+      const ratingSection = form.querySelector('.rating-scale');
+      if (ratingSection) {
+        ratingSection.style.outline = '2px solid #ef4444';
+        ratingSection.style.borderRadius = '8px';
+        setTimeout(() => { ratingSection.style.outline = ''; }, 2000);
+      }
+      return;
+    }
 
     // Collect problems
     const problems = [];
@@ -267,7 +287,7 @@ const FeedbackModal = {
       // Use Web3Forms API for seamless email submission
       const formData = new FormData();
       formData.append('access_key', 'YOUR_WEB3FORMS_KEY'); // You'll need to get this from web3forms.com (free)
-      formData.append('subject', `TalentScreen Feedback - Rating: ${feedback.rating}/10`);
+      formData.append('subject', `TalentScreen Feedback - Rating: ${feedback.rating}/5`);
       formData.append('from_name', 'TalentScreen Extension');
       formData.append('email', 'sampath.velupula@gmail.com,recruiting@whitebox-learning.com');
       formData.append('message', emailBody);
@@ -278,7 +298,7 @@ const FeedbackModal = {
 
       console.log('[Feedback] Email data prepared:', {
         to: ['sampath.velupula@gmail.com', 'recruiting@whitebox-learning.com'],
-        subject: `TalentScreen Feedback - Rating: ${feedback.rating}/10`,
+        subject: `TalentScreen Feedback - Rating: ${feedback.rating}/5`,
         body: emailBody
       });
 
@@ -304,7 +324,7 @@ const FeedbackModal = {
 
     lines.push('=== TALENTSCREEN FEEDBACK ===\n');
     lines.push(`Timestamp: ${new Date(feedback.timestamp).toLocaleString()}`);
-    lines.push(`Rating: ${feedback.rating}/10\n`);
+    lines.push(`Rating: ${feedback.rating}/5\n`);
 
     if (feedback.problems && feedback.problems.length > 0) {
       lines.push('Problems Reported:');

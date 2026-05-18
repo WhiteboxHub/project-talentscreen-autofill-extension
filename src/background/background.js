@@ -288,7 +288,7 @@ function handleFeedbackEmail(feedback, emailBody) {
   try {
     // Create mailto URL
     const recipients = 'sampath.velupula@gmail.com,recruiting@whitebox-learning.com';
-    const subject = encodeURIComponent(`TalentScreen Feedback - Rating: ${feedback.rating}/10`);
+    const subject = encodeURIComponent(`TalentScreen Feedback - Rating: ${feedback.rating}/5`);
     const body = encodeURIComponent(emailBody);
 
     // Mailto has URL length limits, so we'll open a new tab
