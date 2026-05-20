@@ -17,6 +17,7 @@
   },
   "host_permissions": [
     "*://*.myworkdayjobs.com/*",
+    "*://*.isolvedhire.com/*",
     "*://*.greenhouse.io/*",
     "*://boards.greenhouse.io/*",
     "*://jobs.lever.co/*",
@@ -59,6 +60,7 @@
     {
       "matches": [
         "*://*.myworkdayjobs.com/*",
+        "*://*.isolvedhire.com/*",
         "*://*.greenhouse.io/*",
         "*://boards.greenhouse.io/*",
         "*://jobs.lever.co/*",
@@ -114,6 +116,7 @@
         "src/content/atsStrategies/leverStrategy.js",
         "src/content/atsStrategies/linkedinStrategy.js",
         "src/content/atsStrategies/oraclecloudStrategy.js",
+        "src/content/atsStrategies/isolvedhireStrategy.js",
         "src/content/atsStrategies/paychexStrategy.js",
         "src/content/atsStrategies/paycomStrategy.js",
         "src/content/atsStrategies/personioStrategy.js",

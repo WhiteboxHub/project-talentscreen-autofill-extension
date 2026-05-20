@@ -118,10 +118,12 @@ class GenericStrategy {
     handleFileUpload(resumeFile) {
         if (!resumeFile || !resumeFile.data) return;
 
-        // NEW: Persistence check across strategy instances/re-injections using sessionStorage
         const sessionKey = `af_uploaded_${window.location.hostname}`;
-        if (sessionStorage.getItem(sessionKey)) {
-            // 
+        const fileIdentifier = `${resumeFile.name}_${resumeFile.size}`;
+
+        // Only enforce sessionStorage guard for automatic/mutation-based runs.
+        // If this is a manual trigger or the file is different, we bypass the guard.
+        if (!this.isManual && sessionStorage.getItem(sessionKey) === fileIdentifier) {
             return;
         }
 
@@ -166,7 +168,7 @@ class GenericStrategy {
 
                     // Set both the DOM attribute and the sessionStorage flag
                     input.dataset.afUploaded = 'true';
-                    sessionStorage.setItem(sessionKey, 'true');
+                    sessionStorage.setItem(sessionKey, fileIdentifier);
                     this._hasUploadedResume = true;
                     break;
                 } catch (e) {
@@ -944,6 +946,15 @@ class GenericStrategy {
                 select.dispatchEvent(new Event(ev, { bubbles: true, composed: true }));
             });
         }
+
+        // Select2 v3 requires a jQuery change event to visually update.
+        // Fire it unconditionally if jQuery is available; harmless for non-Select2 fields.
+        try {
+            const $ = window.jQuery || window.$;
+            if ($ && typeof $.fn !== 'undefined') {
+                $(select).trigger('change');
+            }
+        } catch (e) { /* silent */ }
     }
 
     highlightUnmatchedRequired(input) {

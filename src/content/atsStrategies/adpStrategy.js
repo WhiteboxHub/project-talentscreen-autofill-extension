@@ -38,7 +38,8 @@ class AdpStrategy extends GenericStrategy {
 // Register with Strategy Registry
 if (typeof ATSStrategyRegistry !== 'undefined') {
     ATSStrategyRegistry.register(
-        (url, doc) => url.includes('adp.com'),
+        (url, doc) => url.includes('adp.com') && 
+            !doc.querySelector('[id*="application-form"], [id*="job-application"], [class*="greenhouse"], form[action*="greenhouse.io"], #grnhse_app, .application--form'),
         AdpStrategy
     );
 }

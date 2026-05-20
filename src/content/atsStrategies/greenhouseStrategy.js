@@ -220,23 +220,68 @@ class GreenhouseStrategy extends GenericStrategy {
             const combined = (select.id || "") + " " + (select.name || "") + " " + labelTxt;
 
             if (keyFragments.some(k => combined.includes(k.toLowerCase()))) {
-                // Use the refactored fuzzy matching from GenericStrategy
                 this.setSelectValue(select, value);
+                // Select2 v3 requires jQuery .trigger('change') to register visually
+                this._triggerJQueryChange(select);
                 return;
             }
         }
     }
 
+    /**
+     * Fire a jQuery change event on a select if jQuery is available.
+     * Required for Select2 v3 which does not respond to native DOM change events.
+     */
+    _triggerJQueryChange(element) {
+        try {
+            const $ = window.jQuery || window.$;
+            if ($ && typeof $.fn !== 'undefined') {
+                $(element).trigger('change');
+            }
+        } catch (e) { /* silent */ }
+    }
+
     async _fillCountryDropdown(normalizedData) {
-        const country = normalizedData?.contact?.country || "";
+        let country = normalizedData?.contact?.country || "";
         if (!country) return;
-        
-        // Greenhouse uses a standard select for country usually, but sometimes Select2
+
+        // If it's a 2-letter country code, convert to English name (e.g. "US" -> "United States")
+        const countryCode = country.toUpperCase();
+        if (country.length === 2) {
+            try {
+                const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
+                const fullName = regionNames.of(countryCode);
+                if (fullName) country = fullName;
+            } catch (e) {
+                if (countryCode === 'US') country = 'United States';
+            }
+        }
+
+        // 1. Try Select2 hidden selects first (common on classic Greenhouse boards)
         await this._fillSelect2InBlock(document, ['country'], country);
-        
-        const countrySelect = document.querySelector('select[id*="country"], select[name*="country"]');
-        if (countrySelect) {
-            this.setSelectValue(countrySelect, country);
+
+        // 2. Try Remix combobox (job-boards.greenhouse.io newer forms)
+        await this._fillRemixSelectInBlock(document, ['country'], country);
+
+        // 3. Try ANY select whose id or name contains 'country' (catches both Select2
+        //    and standard selects, regardless of CSS classes)
+        const countrySelects = document.querySelectorAll(
+            'select[id*="country"], select[name*="country"], select[data-field*="country"]'
+        );
+        for (const sel of countrySelects) {
+            // Only fill if still empty
+            if (!sel.value || sel.value === '' || sel.value === '0') {
+                this.setSelectValue(sel, country);
+                this._triggerJQueryChange(sel);
+            }
+        }
+
+        // 4. Try a plain text input for country (some forms render this as a text box)
+        const countryInput = document.querySelector(
+            'input[id*="country"], input[name*="country"], input[placeholder*="country" i]'
+        );
+        if (countryInput && !countryInput.value) {
+            this.setInputValue(countryInput, country);
         }
     }
 
@@ -311,17 +356,45 @@ class GreenhouseStrategy extends GenericStrategy {
         const legal = customFields.legal || {};
         const contact = normalizedData.contact || {};
 
-        // LinkedIn Profile
-        const linkedinInput = document.querySelector('input[id*="linkedin"], input[aria-label*="LinkedIn"]');
+        // LinkedIn Profile — try multiple selector patterns
+        const linkedinInput = document.querySelector(
+            'input[id*="linkedin"], input[name*="linkedin"], input[aria-label*="LinkedIn" i], input[placeholder*="linkedin" i]'
+        );
         if (linkedinInput && !linkedinInput.value && contact.linkedin) {
-            this.fillInputSafely(linkedinInput, contact.linkedin);
+            this.setInputValue(linkedinInput, contact.linkedin);
         }
 
-        // City/State where working from
-        const cityInput = document.querySelector('input[aria-label*="city"], input[aria-label*="work from"]');
-        if (cityInput && !cityInput.value && contact.city) {
-            const location = contact.state ? `${contact.city}, ${contact.state}` : contact.city;
-            this.fillInputSafely(cityInput, location);
+        // Location / City — Greenhouse uses id="job_application_location" or similar.
+        // Also handles aria-label and placeholder variations.
+        const cityLocation = contact.state ? `${contact.city}, ${contact.state}` : contact.city;
+        if (cityLocation) {
+            // 1. Try Remix combobox first
+            await this._fillRemixSelectInBlock(document, ['city', 'location', 'work from', 'where are you'], cityLocation);
+
+            // 2. Try all common plain-text input patterns Greenhouse uses
+            const locationInput = document.querySelector(
+                'input[id*="location"], input[name*="location"], ' +
+                'input[id*="city"], input[name*="city"], ' +
+                'input[aria-label*="city" i], input[aria-label*="location" i], ' +
+                'input[aria-label*="work from" i], ' +
+                'input[placeholder*="city" i], input[placeholder*="location" i]'
+            );
+            if (locationInput && !locationInput.value) {
+                this.setInputValue(locationInput, cityLocation);
+            }
+
+            // 3. Label-based fallback: find any input whose label text contains 'location' or 'city'
+            if (!locationInput || locationInput.value) {
+                const allInputs = document.querySelectorAll('input[type="text"], input:not([type])');
+                for (const inp of allInputs) {
+                    if (inp.value || inp.dataset.afUserLocked) continue;
+                    const label = (this.getLabelText(inp) || '').toLowerCase();
+                    if (label.includes('location') || label.includes('city') || label.includes('where do you live') || label.includes('where are you')) {
+                        this.setInputValue(inp, cityLocation);
+                        break;
+                    }
+                }
+            }
         }
 
         // Work Authorization - "Are you authorized to work in the U.S."

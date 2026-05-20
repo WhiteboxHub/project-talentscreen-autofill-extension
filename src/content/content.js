@@ -100,6 +100,7 @@ async function fillForm(data, manual = false, resume = null) {
     try {
         const strategy = ATSStrategyRegistry.getStrategy(window.location.href, document);
         if (strategy) {
+            strategy.isManual = manual;
             counts = await strategy.execute(data, resume) || counts;
         }
     } catch (err) { /* silent error for generic strategy */ }

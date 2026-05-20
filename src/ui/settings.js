@@ -111,22 +111,33 @@ document.addEventListener('DOMContentLoaded', () => {
     function populatePersonalForm() {
         if (!currentResumeData) return;
 
+        let normalized = null;
+        try {
+            normalized = ResumeProcessor.normalize(currentResumeData);
+        } catch (e) {
+            console.error('[Settings] Error normalizing resume data:', e);
+        }
+
         const basics = currentResumeData.basics || {};
         const location = basics.location || {};
         const profiles = basics.profiles || [];
         const linkedin = profiles.find(p => p.network === 'LinkedIN' || p.network === 'LinkedIn');
         const github = profiles.find(p => p.network === 'GitHub' || p.network === 'Github');
 
-        document.getElementById('fullName').value = basics.name || '';
-        document.getElementById('email').value = basics.email || '';
-        document.getElementById('phone').value = basics.phone || '';
-        document.getElementById('city').value = location.city || '';
-        document.getElementById('region').value = location.region || '';
-        document.getElementById('country').value = location.country || '';
-        document.getElementById('postalCode').value = location.postalCode || '';
-        document.getElementById('linkedin').value = linkedin?.url || '';
-        document.getElementById('github').value = github?.url || '';
-        document.getElementById('summary').value = basics.summary || '';
+        const normalizedContact = normalized?.contact || {};
+        const normalizedIdentity = normalized?.identity || {};
+        const normalizedSummary = normalized?.summary || {};
+
+        document.getElementById('fullName').value = normalizedIdentity.full_name || basics.name || '';
+        document.getElementById('email').value = normalizedContact.email || basics.email || '';
+        document.getElementById('phone').value = normalizedContact.phone || basics.phone || '';
+        document.getElementById('city').value = normalizedContact.city || location.city || '';
+        document.getElementById('region').value = normalizedContact.state || location.region || '';
+        document.getElementById('country').value = normalizedContact.country || location.country || location.countryCode || '';
+        document.getElementById('postalCode').value = normalizedContact.zip_code || location.postalCode || '';
+        document.getElementById('linkedin').value = normalizedContact.linkedin || linkedin?.url || '';
+        document.getElementById('github').value = normalizedContact.github || github?.url || '';
+        document.getElementById('summary').value = normalizedSummary.long || basics.summary || '';
     }
 
     if (personalForm) {
@@ -732,7 +743,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialize
     init();
-});
 
     // === PREFERENCES MANAGEMENT ===
 
@@ -852,3 +862,4 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+});
