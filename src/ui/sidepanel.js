@@ -593,10 +593,21 @@ document.addEventListener('DOMContentLoaded', () => {
     function populateEditForms() {
         if (!currentResumeData) return;
 
+        let normalized = null;
+        try {
+            normalized = ResumeProcessor.normalize(currentResumeData);
+        } catch (e) {
+            console.error('[Sidepanel] Error normalizing resume data:', e);
+        }
+
         const basics = currentResumeData.basics || {};
         const location = basics.location || {};
         const profiles = basics.profiles || [];
         const linkedin = profiles.find(p => p.network === 'LinkedIN' || p.network === 'LinkedIn');
+
+        const normalizedContact = normalized?.contact || {};
+        const normalizedIdentity = normalized?.identity || {};
+        const normalizedSummary = normalized?.summary || {};
 
         // Parse full name into first/middle/last
         const nameParts = (basics.name || '').trim().split(' ');
@@ -620,20 +631,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const linkedinEl = document.getElementById('edit-linkedin');
         const summaryEl = document.getElementById('edit-summary');
 
-        if (firstNameEl) firstNameEl.value = firstName;
-        if (middleNameEl) middleNameEl.value = middleName;
-        if (lastNameEl) lastNameEl.value = lastName;
-        if (emailEl) emailEl.value = basics.email || '';
+        if (firstNameEl) firstNameEl.value = normalizedIdentity.first_name || firstName;
+        if (middleNameEl) middleNameEl.value = normalizedIdentity.middle_name || middleName;
+        if (lastNameEl) lastNameEl.value = normalizedIdentity.last_name || lastName;
+        if (emailEl) emailEl.value = normalizedContact.email || basics.email || '';
         if (phoneTypeEl) phoneTypeEl.value = basics.phoneType || 'mobile';
-        if (phoneEl) phoneEl.value = basics.phone || '';
-        if (countryEl) countryEl.value = location.country || location.countryCode || '';
-        if (cityEl) cityEl.value = location.city || '';
-        if (regionEl) regionEl.value = location.region || '';
-        if (addressEl) addressEl.value = location.address || '';
-        if (postalCodeEl) postalCodeEl.value = location.postalCode || '';
+        if (phoneEl) phoneEl.value = normalizedContact.phone || basics.phone || '';
+        if (countryEl) countryEl.value = normalizedContact.country || location.country || location.countryCode || '';
+        if (cityEl) cityEl.value = normalizedContact.city || location.city || '';
+        if (regionEl) regionEl.value = normalizedContact.state || location.region || '';
+        if (addressEl) addressEl.value = normalizedContact.address || location.address || '';
+        if (postalCodeEl) postalCodeEl.value = normalizedContact.zip_code || location.postalCode || '';
         if (countyEl) countyEl.value = location.county || '';
-        if (linkedinEl) linkedinEl.value = linkedin?.url || '';
-        if (summaryEl) summaryEl.value = basics.summary || '';
+        if (linkedinEl) linkedinEl.value = normalizedContact.linkedin || linkedin?.url || '';
+        if (summaryEl) summaryEl.value = normalizedSummary.long || basics.summary || '';
 
         // Work Experience
         populateWorkEntries();
