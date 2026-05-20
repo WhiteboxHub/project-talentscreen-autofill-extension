@@ -1,142 +1,429 @@
-# 🚀 Talent Direct Auto fill Extension
+# 🚀 TalentScreen - Whitebox Learning Autofill
 
-A powerful, intelligent Chrome Extension designed to fully automate the tedious process of filling out job applications. By leveraging the [JSON Resume](https://jsonresume.org/) standard, it maps your professional data to complex forms across dozens of Applicant Tracking Systems (ATS) with high precision.
+![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)
+![Platform](https://img.shields.io/badge/platform-Chrome-orange.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+
+**TalentScreen - Whitebox Learning Autofill** is an intelligent Chrome extension that streamlines job applications by auto-filling forms across 26+ Applicant Tracking Systems (ATS) using your JSON resume data.
+
+🔗 **[Install from Chrome Web Store](https://chromewebstore.google.com/detail/talentscreen-autofill/bebdlhhpgmegdebdballinfmfnlpmeio)**
 
 ---
 
 ## ✨ Key Features
 
-- **📊 Application History**: Automatically tracks every form you fill and submit, complete with timestamps, company names, and job roles.
-- **🔒 Smart User-Lock System**: Your manual corrections are sacred. The extension detects when you physically type into a field and "locks" it, ensuring subsequent auto-fill passes never overwrite your manual edits.
-- **🔘 Floating Control Widget**: A premium, draggable overlay that appears on every fill (manual or queue), giving you instant access to **Fill**, **Next**, and **Stop/Close** controls directly on the page.
-- **⚡ 100% Automatic Execution**: No "Fill" button required. The extension detects supported forms instantly and populates them as they render.
-- **🧪 Robust Data Sanitization**: The resume uploader automatically strips illegal control characters from your JSON files, ensuring smooth imports from any source.
+- **🎯 Manual Control**: User-triggered autofill with visual feedback
+- **📁 Dual Format Support**: JSON resume + optional PDF attachment
+- **🛠️ Integrated Data Manager**: Edit resume data directly in the extension
+- **📊 Application Tracking**: Automatic history of filled applications
+- **🔒 User-Lock System**: Protects manually edited fields from overwrites
+- **✅ Smart Validation**: Pre-flight checks for required resume fields
+- **🎨 Modern Setup-First UI**: Clean, intuitive interface with no clutter
+- **🔄 Custom Fields**: Extended support for EEO, legal, and technical screening questions
 
 ---
 
 ## 🏗️ Supported ATS Platforms
 
-We currently support full auto-filling for the following platforms:
-- **ADP**
-- **ApplyToJob (JazzHR)**
-- **Ashby**
-- **BambooHR**
-- **BrassRing**
-- **Greenhouse**
-- **iCIMS**
-- **Indeed**
-- **Jobvite**
-- **Lever**
-- **LinkedIn**
-- **Oracle Cloud**
-- **Paychex**
-- **Paycom**
-- **Personio**
-- **Recruitee**
-- **Rippling**
-- **SmartRecruiters**
-- **SuccessFactors**
-- **Taleo**
-- **Teamtailor**
-- **UltiPro (UKG)**
-- **Workable**
-- **Workday**
-- **Generic HTML Forms** (Heuristic matching for unsupported boards)
+TalentScreen supports 26+ major Applicant Tracking Systems:
+
+| Category | Platforms |
+|----------|-----------|
+| **Enterprise** | Workday, SuccessFactors, Oracle Cloud, Taleo |
+| **Popular** | Greenhouse, Lever, iCIMS, SmartRecruiters |
+| **Modern** | Ashby, Rippling, BambooHR, Personio |
+| **Large Networks** | Indeed, LinkedIn Jobs |
+| **Payroll-Integrated** | ADP, Paychex, UltiPro (UKG), Paycom |
+| **Others** | Jobvite, Workable, Recruitee, TeamTailor, BrassRing, ApplyToJob |
+| **Generic Fallback** | Heuristic matching for custom job boards |
 
 ---
 
-## 🛠️ Installation
+## 📥 Installation
 
-1. **Download**: Install the extension directly from the [Chrome Web Store](https://chromewebstore.google.com/detail/autofill-job-applications/bebdlhhpgmegdebdballinfmfnlpmeio).
-2. **Add to Chrome**: Click **Add to Chrome** and pin the extension 🧩 to your toolbar for easy access.
-3. Right click on the pinned extension to open Side panel.
----
+### From Chrome Web Store (Recommended)
+1. Visit the [Chrome Web Store listing](https://chromewebstore.google.com/detail/talentscreen-autofill/bebdlhhpgmegdebdballinfmfnlpmeio)
+2. Click **"Add to Chrome"**
+3. Pin the extension to your toolbar
 
-## 📖 Getting Started
+### From Source (Development)
+```bash
+# Clone repository
+git clone https://github.com/your-org/talentscreen-autofill-extension.git
+cd talentscreen-autofill-extension
 
-### 1. Prepare your `resume.json`
-The extension uses an enhanced version of the JSON Resume schema. 
-- Download our [**Sample Resume JSON Template**](https://github.com/Jatin-Singh2003/Autofill-extension-privacy-policy/blob/main/sample.json) to get started.
-- Fill the template with your personal details, work history, education, and skills.
-
-### 2. Upload Profile
-- Click the Extension icon 🧩 in your browser toolbar to open the **Side Panel**.
-- Click **Upload resume.json** and select the file you just created. The extension will securely cache it locally on your device.
-
-### 3. Start Applying
-- Navigate to any supported job application page (e.g., a Greenhouse or Workday link).
-- **Watch the magic happen**: Fields will be populated automatically as they render.
-    - 🟢 **Green**: High-confidence match (Auto-filled).
-    - 🔴 **Red**: Required field that could not be matched.
-
-### 4. Review & Edit
-- Check the **Fill Summary** in the Side Panel to verify all answers.
-- Manually correct any missed fields on the page. Your edits are automatically protected by our Smart User-Lock System!
+# Load in Chrome
+1. Open chrome://extensions/
+2. Enable "Developer mode"
+3. Click "Load unpacked"
+4. Select the extension directory
+```
 
 ---
 
-## 📂 Project Structure
+## 🎯 Getting Started
 
-- `atsStrategies/`: Modular classes for platform-specific automation logic.
-- `content.js`: The heart of the extension; manages DOM injection and strategy routing.
-- `resumeProcessor.js`: Normalizes complex JSON schemas into a flat, searchable index.
-- `sidepanel.js/html/css`: The UI layer for user interaction and data review.
-- `background.js`: Manages extension lifecycle and storage synchronization.
+### 1. Prepare Your Resume JSON
+
+TalentScreen uses the [JSON Resume](https://jsonresume.org/) standard with custom field extensions.
+
+**📄 Sample Template:** [View on GitHub](https://github.com/WhiteboxHub/project-avatar-resume-json-cli/blob/main/src/resumes/test/demo.json)
+
+**Minimal Example:**
+```json
+{
+  "basics": {
+    "name": "Your Name",
+    "email": "you@example.com",
+    "phone": "+1-555-0100",
+    "location": {
+      "city": "San Francisco",
+      "region": "CA",
+      "postalCode": "94102",
+      "countryCode": "US"
+    }
+  },
+  "work": [
+    {
+      "name": "Company Name",
+      "position": "Software Engineer",
+      "startDate": "2020-01-01",
+      "summary": "Built scalable systems..."
+    }
+  ],
+  "education": [
+    {
+      "institution": "University Name",
+      "area": "Computer Science",
+      "studyType": "Bachelor",
+      "endDate": "2019-12-01"
+    }
+  ],
+  "skills": [
+    {
+      "name": "Programming",
+      "keywords": ["JavaScript", "Python", "React"]
+    }
+  ]
+}
+```
+
+### 2. Upload Your Data
+
+1. Click the extension icon to open the side panel
+2. Upload your **resume JSON** (required)
+3. Upload your **resume PDF** (optional, for file attachments)
+4. Click **"Autofill Form"** on any supported job application page
+
+### 3. Manage Your Information
+
+- Click **"Manage Information"** to edit your JSON data
+- Use **"Update JSON"** or **"Update PDF"** quick actions
+- View recent applications in the **History** section
 
 ---
 
-## 🔮 Roadmap
+## 🏗️ Project Structure
 
-- [ ] **Multi-Profile Support**: Switch between tailored resumes for different roles (e.g., "Fullstack" vs "DevOps").
-- [ ] **Job Tracker 2.0**: Automatically log applications to a localized dashboard with status tracking.
-- [ ] **Mobile Support**: Integration with Kiwi/Kiwi-Next browsers for automated mobile applications.
+```
+talentscreen-autofill-extension/
+├── manifest.json                    # Extension configuration
+├── src/
+│   ├── core/
+│   │   └── resumeProcessor.js       # Central data normalization module
+│   ├── background/
+│   │   └── background.js            # Service worker (Manifest V3)
+│   ├── content/
+│   │   ├── content.js               # Page interaction orchestrator
+│   │   └── atsStrategies/           # ATS-specific strategies (26 files)
+│   │       ├── strategyRegistry.js  # Strategy pattern implementation
+│   │       ├── genericStrategy.js   # Base strategy (937 LOC)
+│   │       ├── workdayStrategy.js
+│   │       ├── greenhouseStrategy.js
+│   │       └── ...
+│   └── ui/
+│       ├── sidepanel.html           # Extension UI
+│       ├── sidepanel.js             # UI controller
+│       └── styles.css               # Modern styling
+├── assets/
+│   └── icons/                       # Extension icons
+├── docs/
+│   └── sample_resume.json           # Full resume template
+├── build/
+│   └── package.js                   # Build script
+└── README.md
+```
+
+---
+
+## 🔧 Development
+
+### Prerequisites
+- Node.js 16+ (for build script)
+- Chrome/Chromium browser
+- Git
+
+### Setup
+```bash
+# Install (no dependencies currently)
+npm install
+
+# Lint JavaScript files
+npm run lint
+
+# Build production ZIP
+npm run build
+
+# Run tests (placeholder)
+npm test
+```
+
+### Loading Unpacked Extension
+1. Navigate to `chrome://extensions/`
+2. Enable **Developer mode** (top right toggle)
+3. Click **Load unpacked**
+4. Select the project root directory
+5. The extension will appear with a generated ID
+
+### Testing
+```bash
+# Manual Testing Checklist
+1. Load extension in Chrome
+2. Navigate to a test job board (e.g., greenhouse.io/embed/job_board)
+3. Upload sample JSON from docs/
+4. Click "Autofill Form"
+5. Verify fields populate correctly
+6. Manually edit a field
+7. Click "Autofill Form" again
+8. Verify manually edited field is NOT overwritten (user-lock)
+9. Check application history
+```
+
+### Debugging
+```bash
+# View extension logs
+1. Right-click extension icon → Inspect popup
+2. Console tab shows [Sidepanel] logs
+
+# View content script logs
+1. Open any job application page
+2. Open DevTools (F12)
+3. Console shows [Content] logs
+
+# View service worker logs
+1. Navigate to chrome://extensions/
+2. Click "service worker" link under extension
+3. Console shows [Background] logs
+```
+
+---
+
+## 🏗️ Architecture
+
+### Strategy Pattern for ATS Detection
+```javascript
+// Each ATS gets a custom strategy
+class WorkdayStrategy extends GenericStrategy {
+  execute(normalizedData, resumeFile) {
+    // Workday-specific logic
+  }
+}
+
+// Registration
+ATSStrategyRegistry.register(
+  (url) => url.includes('workday.com'),
+  WorkdayStrategy
+);
+```
+
+### Data Flow
+```
+1. User uploads JSON → sidepanel.js
+2. ResumeProcessor.normalize() → Structured data
+3. Chrome storage → Persisted
+4. User clicks "Autofill" → Message to content script
+5. ATSStrategyRegistry.getStrategy() → Selects strategy
+6. Strategy.execute() → Fills form fields
+7. Progress updates → Back to sidepanel
+8. History logged → Chrome storage
+```
+
+### Custom Fields Extension
+```json
+{
+  "custom_fields": {
+    "eeo": {
+      "gender": "male",
+      "ethnicity": "asian",
+      "veteran_status": "no",
+      "disability_status": "no"
+    },
+    "legal": {
+      "work_auth_us": true,
+      "sponsorship_required_now": false,
+      "security_clearance": "no"
+    },
+    "technical_screening": {
+      "years_python": 10,
+      "years_llm": 3
+    },
+    "application_logistics": {
+      "willing_to_relocate": "yes",
+      "screening_answers": {
+        "why_interested": "Your compelling reason...",
+        "why_good_fit": "Your relevant experience..."
+      }
+    }
+  }
+}
+```
+
+---
+
+## 🐛 Troubleshooting
+
+### Extension Not Working
+**Problem:** "Could not reach page" error  
+**Solution:**
+- Reload the job application page
+- Ensure the site is in the supported ATS list
+- Check if content script loaded: DevTools → Sources → Content Scripts
+
+**Problem:** Fields not filling correctly  
+**Solution:**
+- Verify JSON format using [jsonlint.com](https://jsonlint.com/)
+- Check required fields: name, email
+- Some ATS use dynamic forms that load slowly—wait 2-3 seconds
+
+**Problem:** PDF not attaching  
+**Solution:**
+- Ensure file is under 10MB
+- Supported formats: PDF, DOC, DOCX
+- Some ATS don't support automated file uploads
+
+### Build Issues
+**Problem:** `npm run build` fails  
+**Solution:**
+```bash
+# Ensure you have zip utility installed
+which zip  # Should return /usr/bin/zip or similar
+
+# On macOS, zip is pre-installed
+# On Linux: apt-get install zip
+```
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! If you encounter an unsupported job board or a bug:
-1. Fork the repo.
-2. Create a new ATS strategy in `atsStrategies/`.
-3. Register it in `strategyRegistry.js`.
-4. Submit a Pull Request.
+Contributions are welcome! To add support for a new ATS:
+
+### 1. Create a New Strategy
+```javascript
+// src/content/atsStrategies/newAtsStrategy.js
+class NewAtsStrategy extends GenericStrategy {
+  constructor() {
+    super();
+    this.CONFIDENCE_THRESHOLD = 70;
+  }
+
+  async execute(normalizedData, resumeFile) {
+    await super.execute(normalizedData, resumeFile);
+    // Add ATS-specific logic here
+  }
+}
+
+// Register
+if (typeof ATSStrategyRegistry !== 'undefined') {
+  ATSStrategyRegistry.register(
+    (url) => url.includes('newats.com'),
+    NewAtsStrategy
+  );
+}
+```
+
+### 2. Update manifest.json
+```json
+{
+  "host_permissions": [
+    "*://*.newats.com/*"
+  ],
+  "content_scripts": [{
+    "matches": ["*://*.newats.com/*"],
+    "js": [
+      "src/core/resumeProcessor.js",
+      "src/content/atsStrategies/genericStrategy.js",
+      "src/content/atsStrategies/strategyRegistry.js",
+      "src/content/atsStrategies/newAtsStrategy.js",
+      "src/content/content.js"
+    ]
+  }]
+}
+```
+
+### 3. Submit Pull Request
+- Fork the repository
+- Create a feature branch: `git checkout -b add-newats-support`
+- Test thoroughly on live ATS site
+- Submit PR with:
+  - Strategy implementation
+  - Manifest updates
+  - Test results/screenshots
 
 ---
 
-## 🔐 Permissions Justification
+## 📄 License
 
-To provide a seamless experience across the vast landscape of Applicant Tracking Systems (ATS), this extension requires the following permissions:
-
-- **`activeTab`**: Powers the "Force Fill Data" context menu on custom domains and allows interaction with the current form without running in the background.
-- **`storage`**: Used to securely store your resume data locally on your device for autofilling.
-- **`host_permissions` (Specific ATS Domains)**: We strictly whitelist major ATS domains (e.g., Workday, Lever, Greenhouse) for automatic injection. This ensures maximum browser performance and privacy by avoiding injection on every website you visit.
-- **`sidePanel`**: Provides a convenient interface for managing your resume data and triggering the autofill without obscuring the application form.
+MIT License - see LICENSE file for details
 
 ---
 
 ## 👥 Authors
 
-- **Sampath Velupula**
-- **Ravi Kumar Rayapalli**
-- **Ramana gangarao**
-- **Bavish Kangari**
-- **Jafar vali**
-- **Jatin Thakur**
-- **Jashuva Billa**
-- **GuruTeja Nakkala**
-- **Mahender Goud Bathini**
-- **Sai Ram**
-- **Adarsh Teja Kalakanda**
-- **Sunil Poli**
-- **Pathan Karimulla**
-- **Hemant Kumar**
-- **Jawahar Reddy Nimma**
-- **Rohith Yadav Avula**
-- **Ajmer Khaja Md**
-- **Manisai Saduvala**
-- **Shiva patel**
-- **Pathan Mohammad Rajak**
+**Whitebox Learning** - Educational platform for AI and software engineering
+
+- **Lead Developer:** Sampath Velupula
+- **Contributors:** Ravi Kumar Rayapalli, Ramana Gangarao, Bavish Kangari, Jafar Vali, Jatin Thakur
 
 ---
 
-*Built for job seekers who value their time.*
+## 🔐 Privacy
+
+This extension:
+- ✅ Stores all data **locally** in Chrome storage
+- ✅ **Never sends** data to external servers
+- ✅ **Open source** - audit the code yourself
+- ✅ Requests permissions only for supported job boards
+
+Read our full [Privacy Policy](PRIVACY_POLICY.md)
+
+---
+
+## 📞 Support
+
+- 🐛 **Bug Reports:** [GitHub Issues](https://github.com/your-org/talentscreen-autofill-extension/issues)
+- 💬 **Discussions:** [GitHub Discussions](https://github.com/your-org/talentscreen-autofill-extension/discussions)
+- 📧 **Email:** support@whiteboxlearning.com
+
+---
+
+## 🗺️ Roadmap
+
+### v2.1 (Q3 2026)
+- [ ] Test framework with Playwright
+- [ ] ML-based field detection
+- [ ] Multi-language support
+
+### v2.2 (Q4 2026)
+- [ ] Firefox/Edge support
+- [ ] Resume template library
+- [ ] Advanced analytics dashboard
+
+### v3.0 (2027)
+- [ ] AI-powered cover letter generation
+- [ ] Interview preparation assistant
+- [ ] Job search optimization
+
+---
+
+**Built for job seekers who value their time. Made with ❤️ by Whitebox Learning.**

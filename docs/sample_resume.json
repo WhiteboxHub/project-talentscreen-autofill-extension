@@ -1,0 +1,126 @@
+{
+    "basics": {
+        "name": "Alex Anderson",
+        "label": "Software Engineer, Web Development, Cloud Infrastructure",
+        "image": "",
+        "email": "alex.anderson@example.com",
+        "url": "https://www.linkedin.com/in/alex-anderson-fake/",
+        "summary": "Senior Software Engineer with a track record of building scalable web applications and cloud infrastructure. Passionate about clean code, robust architectures, and mentoring junior developers.",
+        "location": {
+            "address": "123 Fake Street",
+            "postalCode": "62701",
+            "city": "Springfield",
+            "countryCode": "US",
+            "region": "Illinois"
+        },
+        "profiles": [
+            {
+                "network": "LinkedIN",
+                "username": "alex-anderson-fake",
+                "url": "https://www.linkedin.com/in/alex-anderson-fake/"
+            },
+            {
+                "network": "Github",
+                "username": "alex-anderson-dev",
+                "url": "https://github.com/alex-anderson-dev"
+            }
+        ]
+    },
+    "work": [
+        {
+            "name": "Globex Corporation",
+            "position": "Senior Software Engineer",
+            "url": "https://globex-fake-corp.com",
+            "startDate": "2021-08-15",
+            "summary": "Lead developer for the core e-commerce platform, overseeing a team of 5 engineers and managing cloud deployments.",
+            "highlights": [
+                "Architected a new microservices backend that improved system uptime by 99.9%.",
+                "Mentored junior developers and established code review guidelines."
+            ]
+        },
+        {
+            "name": "Initech",
+            "position": "Software Engineer",
+            "url": "https://initech-fake.com",
+            "startDate": "2018-06-01",
+            "endDate": "2021-08-01",
+            "summary": "Developed internal tools and automated reporting systems for the finance department.",
+            "highlights": [
+                "Built an automated TPS report generator that saved 20 hours of manual work per week."
+            ]
+        }
+    ],
+    "education": [
+        {
+            "institution": "University of Science",
+            "url": "https://science-university-fake.edu/",
+            "area": "Computer Science",
+            "studyType": "Masters",
+            "startDate": "2016-08-01",
+            "endDate": "2018-05-01",
+            "score": "3.8",
+            "courses": []
+        }
+    ],
+    "skills": [
+        {
+            "name": "Backend Development",
+            "keywords": [
+                "Node.js",
+                "Python",
+                "PostgreSQL",
+                "Redis",
+                "Microservices",
+                "GraphQL"
+            ]
+        },
+        {
+            "name": "Cloud & DevOps",
+            "keywords": [
+                "AWS",
+                "Docker",
+                "Kubernetes",
+                "CI/CD",
+                "Terraform",
+                "Observability"
+            ]
+        }
+    ],
+    "custom_fields": {
+        "eeo": {
+            "gender": "decline",
+            "ethnicity": "decline",
+            "veteran_status": "decline",
+            "disability_status": "decline",
+            "lgbtq": "decline",
+            "pronouns": "they/them"
+        },
+        "legal": {
+            "work_auth_us": true,
+            "sponsorship_required_now": false,
+            "sponsorship_required_future": false,
+            "security_clearance": "no",
+            "visa_status": "citizen",
+            "work_authorization_expiration": "n/a",
+            "notice_period_days": 14
+        },
+        "technical_screening": {
+            "years_llm": 1,
+            "years_ml_deployment": 2,
+            "years_python": 6,
+            "years_kubernetes": 3,
+            "experience_rag": false,
+            "experience_agentic_ai": false,
+            "highest_education": "masters"
+        },
+        "application_logistics": {
+            "resume_pdf_url": "https://example.com/alex_anderson_resume.pdf",
+            "willing_to_relocate": "yes",
+            "willing_to_travel": "no",
+            "screening_answers": {
+                "why_interested": "I am passionate about building scalable solutions and I admire the innovative products your company creates.",
+                "why_good_fit": "With my background in robust backend architectures and cloud deployments, I can immediately contribute to your engineering goals."
+            }
+        }
+    }
+}
