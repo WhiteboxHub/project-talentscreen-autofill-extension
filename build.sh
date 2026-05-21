@@ -5,6 +5,8 @@
 
 set -e
 
+cd "$(dirname "$0")"
+
 echo "🚀 TalentScreen Autofill - Build Script"
 echo "========================================"
 
@@ -35,6 +37,7 @@ zip -r "$OUTPUT" . \
   -x "*.log" \
   -x "*.md" \
   -x "build.sh" \
+  -x "build.bat" \
   -x "package*.json" \
   -x ".env*" \
   -x "*.txt" \
