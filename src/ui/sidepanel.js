@@ -547,6 +547,7 @@ document.addEventListener('DOMContentLoaded', () => {
         editSection.classList.add('hidden');
         jsonSection.classList.add('hidden');
         settingsSection.classList.add('hidden');
+        if (trackingSection) trackingSection.classList.add('hidden');
 
         if (section === 'edit') {
             editSection.classList.remove('hidden');
@@ -554,6 +555,8 @@ document.addEventListener('DOMContentLoaded', () => {
             populateEditForms();
         } else if (section === 'json') {
             jsonSection.classList.remove('hidden');
+        } else if (section === 'tracking') {
+            if (trackingSection) trackingSection.classList.remove('hidden');
         } else if (section === 'settings') {
             settingsSection.classList.remove('hidden');
         }

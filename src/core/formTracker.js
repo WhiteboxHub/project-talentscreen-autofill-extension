@@ -17,6 +17,7 @@ const FormTracker = (() => {
     // Current session state
     let currentSession = null;
     let sessionHistory = [];
+    let lastCompletedSession = null;
     let fieldStates = new Map(); // fieldId -> state object
     let retryQueue = [];
     let debugLogs = [];
@@ -77,6 +78,19 @@ const FormTracker = (() => {
             return;
         }
 
+        const existingState = fieldStates.get(fieldId);
+        if (existingState) {
+            existingState.label = fieldData.label || fieldData.name || fieldData.id || existingState.label;
+            existingState.type = fieldData.type || existingState.type;
+            existingState.required = fieldData.required || existingState.required;
+            existingState.selector = fieldData.selector || existingState.selector;
+            existingState.confidence = fieldData.confidence || existingState.confidence;
+
+            log('Field already registered', { fieldId, label: existingState.label, status: existingState.status });
+            updateProgress();
+            return fieldId;
+        }
+
         const state = {
             id: fieldId,
             label: fieldData.label || fieldData.name || fieldData.id || 'unknown',
@@ -99,6 +113,7 @@ const FormTracker = (() => {
 
         log('Field registered', { fieldId, label: state.label, type: state.type, required: state.required });
         updateProgress();
+        return fieldId;
     }
 
     /**
@@ -307,9 +322,14 @@ const FormTracker = (() => {
         const total = currentSession.fields.total;
         const filled = currentSession.fields.filled;
         currentSession.completionPercentage = total > 0 ? Math.round((filled / total) * 100) : 0;
+        currentSession.fieldStates = getFieldStates();
+        currentSession.failures = currentSession.fieldStates.filter(field => field.status === 'failed');
+        currentSession.needsReview = currentSession.fieldStates.filter(field => field.status === 'needs_review');
 
         // Save to history
-        sessionHistory.push({ ...currentSession });
+        const completedSession = { ...currentSession };
+        sessionHistory.push(completedSession);
+        lastCompletedSession = completedSession;
         saveHistory();
 
         log('Session ended', {
@@ -320,7 +340,6 @@ const FormTracker = (() => {
 
         notifySidepanel({ action: 'session_ended', session: currentSession });
 
-        const completedSession = currentSession;
         currentSession = null;
         fieldStates.clear();
 
@@ -386,6 +405,13 @@ const FormTracker = (() => {
      */
     function getCurrentSession() {
         return currentSession ? { ...currentSession } : null;
+    }
+
+    /**
+     * Get the most recently completed session
+     */
+    function getLastCompletedSession() {
+        return lastCompletedSession ? { ...lastCompletedSession } : null;
     }
 
     /**
@@ -544,11 +570,17 @@ const FormTracker = (() => {
      * Export session data for external tools (Playwright/CLI)
      */
     function exportSessionData() {
+        const completedSession = getLastCompletedSession();
+        const activeFieldStates = getFieldStates();
+        const fieldStateSnapshot = activeFieldStates.length > 0
+            ? activeFieldStates
+            : (completedSession?.fieldStates || []);
+
         return {
-            currentSession: getCurrentSession(),
-            fieldStates: getFieldStates(),
-            failures: getFailures(),
-            needsReview: getNeedsReview(),
+            currentSession: getCurrentSession() || completedSession,
+            fieldStates: fieldStateSnapshot,
+            failures: activeFieldStates.length > 0 ? getFailures() : (completedSession?.failures || []),
+            needsReview: activeFieldStates.length > 0 ? getNeedsReview() : (completedSession?.needsReview || []),
             history: getRecentHistory(5),
             debugLogs: CONFIG.DEBUG_MODE ? getDebugLogs() : []
         };
@@ -584,6 +616,7 @@ const FormTracker = (() => {
         pauseSession,
         resumeSession,
         getCurrentSession,
+        getLastCompletedSession,
         markSubmissionDetected,
 
         // Field tracking
