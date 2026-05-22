@@ -380,19 +380,35 @@ class GenericStrategy {
 
             totalInteractable++;
 
+            // Register field with tracking system
+            if (typeof TrackingIntegration !== 'undefined' && window.TrackingIntegration && window.TrackingIntegration.initialized) {
+                try {
+                    const label = this.getLabelText(input) || input.name || input.id || 'unknown';
+                    window.TrackingIntegration.trackField(input, label, input.type);
+                } catch (e) { /* tracking should never break autofill */ }
+            }
+
             // Skip fields the user has manually edited
             if (input.dataset.afUserLocked === 'true') continue;
 
             // Handle Radio/Checkbox
             if (input.type === 'radio' || input.type === 'checkbox') {
                 this.handleRadioCheckbox(input, normalizedData);
-                if (input.checked) fillCount++;
+                if (input.checked) {
+                    fillCount++;
+                    if (typeof TrackingIntegration !== 'undefined' && window.TrackingIntegration && window.TrackingIntegration.initialized) {
+                        try { window.TrackingIntegration.trackFilled(input, String(input.value || input.checked), 'radio_checkbox'); } catch (e) { /* silent */ }
+                    }
+                }
                 continue;
             }
 
             // Skip inputs that are already filled (unless forced)
             if (input.value && input.value.trim() !== '') {
                 fillCount++;
+                if (typeof TrackingIntegration !== 'undefined' && window.TrackingIntegration && window.TrackingIntegration.initialized) {
+                    try { window.TrackingIntegration.trackFilled(input, input.value, 'pre_filled'); } catch (e) { /* silent */ }
+                }
                 continue;
             }
 
@@ -474,10 +490,28 @@ class GenericStrategy {
                     if (match.confidence >= this.CONFIDENCE_THRESHOLD) {
                         this.setInputValue(input, match.value, 'green');
                         fillCount++;
+                        // Track successful fill
+                        if (typeof TrackingIntegration !== 'undefined' && window.TrackingIntegration && window.TrackingIntegration.initialized) {
+                            try { window.TrackingIntegration.trackFilled(input, match.value, match.fieldKey || 'heuristic'); } catch (e) { /* silent */ }
+                        }
+                    } else {
+                        // Low confidence — mark for review
+                        if (typeof TrackingIntegration !== 'undefined' && window.TrackingIntegration && window.TrackingIntegration.initialized) {
+                            try { window.TrackingIntegration.trackNeedsReview(input, 'low_confidence'); } catch (e) { /* silent */ }
+                        }
                     }
                 } else {
                     if (input.required || input.getAttribute('aria-required') === 'true') {
                         this.highlightUnmatchedRequired(input);
+                        // Track required field with no data as needs_review
+                        if (typeof TrackingIntegration !== 'undefined' && window.TrackingIntegration && window.TrackingIntegration.initialized) {
+                            try { window.TrackingIntegration.trackNeedsReview(input, 'no_data_required'); } catch (e) { /* silent */ }
+                        }
+                    } else {
+                        // Track optional field with no data as skipped
+                        if (typeof TrackingIntegration !== 'undefined' && window.TrackingIntegration && window.TrackingIntegration.initialized) {
+                            try { window.TrackingIntegration.trackSkipped(input, 'no_data'); } catch (e) { /* silent */ }
+                        }
                     }
                 }
 

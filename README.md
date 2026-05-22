@@ -309,6 +309,8 @@ ATSStrategyRegistry.register(
 which zip  # Should return /usr/bin/zip or similar
 
 # On macOS, zip is pre-installed
+# Command to run for zip file in macOS : chmod +x build.sh then ./build.sh
+# Command to run for zip file in windows : ./build.ps1
 # On Linux: apt-get install zip
 ```
 

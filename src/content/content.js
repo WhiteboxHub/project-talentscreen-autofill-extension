@@ -42,7 +42,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Check if FormTracker has an active session with progress
         let hasProgress = false;
 
-        if (typeof FormTracker !== 'undefined' && FormTracker.initialized) {
+        if (typeof FormTracker !== 'undefined' && FormTracker.getCurrentSession) {
             const session = FormTracker.getCurrentSession();
             hasProgress = session && (session.fields.filled > 0 || session.fields.failed > 0);
         } else {
@@ -97,13 +97,41 @@ function checkSuccessPage() {
 
 async function fillForm(data, manual = false, resume = null) {
     let counts = { filled: 0, total: 0 };
+    let atsType = 'generic';
+    let sessionStatus = 'completed';
+
     try {
         const strategy = ATSStrategyRegistry.getStrategy(window.location.href, document);
         if (strategy) {
+            atsType = strategy.constructor.name || 'generic';
             strategy.isManual = manual;
+
+            // Initialize tracking session before fill
+            if (typeof TrackingIntegration !== 'undefined' && window.TrackingIntegration) {
+                try {
+                    window.TrackingIntegration.init(atsType, strategy);
+                    console.log('[Content] TrackingIntegration session started for', atsType);
+                } catch (trackErr) {
+                    console.warn('[Content] TrackingIntegration init error:', trackErr);
+                }
+            }
+
             counts = await strategy.execute(data, resume) || counts;
         }
-    } catch (err) { /* silent error for generic strategy */ }
+    } catch (err) {
+        sessionStatus = 'failed';
+        console.error('[Content] fillForm error:', err);
+    } finally {
+        // End tracking session after fill completes
+        if (typeof TrackingIntegration !== 'undefined' && window.TrackingIntegration && window.TrackingIntegration.initialized) {
+            try {
+                window.TrackingIntegration.endSession(sessionStatus);
+                console.log('[Content] TrackingIntegration session ended:', sessionStatus);
+            } catch (trackErr) {
+                console.warn('[Content] TrackingIntegration endSession error:', trackErr);
+            }
+        }
+    }
 
     const meta = extractJobMetadata();
     chrome.runtime.sendMessage({ 
