@@ -221,11 +221,32 @@ const DynamicFormWatcher = {
    * @param {HTMLElement[]} fields
    */
   async handleNewFields(fields) {
-    // Notify FormTracker if available
-    if (window.FormTracker && typeof window.FormTracker.registerField === 'function') {
+    // Notify TrackingIntegration if available (it handles fieldId/fieldData generation correctly)
+    if (window.TrackingIntegration && typeof window.TrackingIntegration.trackField === 'function') {
       fields.forEach(field => {
         try {
-          window.FormTracker.registerField(field);
+          window.TrackingIntegration.trackField(field);
+        } catch (error) {
+          console.error('[DynamicFormWatcher] Error registering field via TrackingIntegration:', error);
+        }
+      });
+    } else if (window.FormTracker && typeof window.FormTracker.registerField === 'function') {
+      // Fallback: build proper fieldId + fieldData before calling registerField directly
+      fields.forEach(field => {
+        try {
+          const fieldId = field.id ? `id:${field.id}` :
+                          field.name ? `name:${field.name}` :
+                          `field_${Array.from(document.querySelectorAll('input, select, textarea')).indexOf(field)}`;
+          const fieldData = {
+            label: field.getAttribute('aria-label') || field.placeholder || field.name || field.id || 'unknown',
+            type: field.type || field.tagName.toLowerCase(),
+            required: field.required || field.hasAttribute('required'),
+            selector: field.id ? `#${field.id}` : field.name ? `[name="${field.name}"]` : field.tagName.toLowerCase(),
+            confidence: 1.0,
+            name: field.name,
+            id: field.id
+          };
+          window.FormTracker.registerField(fieldId, fieldData);
         } catch (error) {
           console.error('[DynamicFormWatcher] Error registering field:', error);
         }
