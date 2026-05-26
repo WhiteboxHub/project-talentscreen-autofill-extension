@@ -404,7 +404,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const screening = logistics.screening_answers || {};
 
         // EEO
-        document.getElementById('gender').value = eeo.gender || 'male';
+        const genderVal = (eeo.gender || currentResumeData.basics?.gender || '').toLowerCase();
+        const genderSelect = document.getElementById('gender');
+        if (['male', 'female', 'non-binary', 'decline'].includes(genderVal)) {
+            genderSelect.value = genderVal;
+        } else {
+            genderSelect.value = '';
+        }
         document.getElementById('ethnicity').value = eeo.ethnicity || 'asian';
         document.getElementById('veteranStatus').value = eeo.veteran_status || 'no';
         document.getElementById('disabilityStatus').value = eeo.disability_status || 'no';
@@ -429,8 +435,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Application Logistics
         document.getElementById('willingRelocate').value = logistics.willing_to_relocate || 'yes';
         document.getElementById('willingTravel').value = logistics.willing_to_travel || 'yes';
-        document.getElementById('whyInterested').value = screening.why_interested || 'Driven by the challenge of architecting production-grade agentic workflows and scaling LLM infrastructure within enterprise environments.';
-        document.getElementById('whyGoodFit').value = screening.why_good_fit || 'Proven experience leading AI architecture at Lucid Motors and Yahoo, focusing on end-to-end MLOps and highly available distributed systems.';
+        document.getElementById('whyInterested').value = screening.why_interested || '';
+        document.getElementById('whyGoodFit').value = screening.why_good_fit || '';
     }
 
     if (customForm) {
