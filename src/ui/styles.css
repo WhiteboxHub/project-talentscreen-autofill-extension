@@ -500,13 +500,7 @@ body {
 }
 
 .review-alert {
-  margin-top: 12px;
-  padding: 12px;
-  background: rgba(255, 193, 7, 0.1);
-  border: 1px solid var(--warning);
-  border-radius: 8px;
-  font-size: 0.8rem;
-  color: var(--warning);
+  display: none;
 }
 
 .view-fields-btn {
@@ -1427,58 +1421,6 @@ body {
   color: var(--primary);
 }
 
-/* === COMPLETION WIDGET === */
-
-.completion-widget {
-  padding: 16px;
-}
-
-.completion-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.completion-label {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.completion-percentage {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--primary);
-}
-
-.completion-bar-container {
-  width: 100%;
-  height: 8px;
-  background: var(--primary-light);
-  border-radius: 10px;
-  overflow: hidden;
-  margin-bottom: 10px;
-}
-
-.completion-bar {
-  height: 100%;
-  background: var(--primary);
-  border-radius: 10px;
-  transition: width 0.3s ease;
-}
-
-.completion-details {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.completion-text {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
 /* === REQUIRED/OPTIONAL INDICATORS === */
 
 .required-indicator {
@@ -1799,4 +1741,172 @@ body {
 .gray-action-btn svg {
   color: var(--text-muted);
   flex-shrink: 0;
+}
+
+/* === FIELD STATUS SECTION === */
+
+.field-status-section {
+  background-color: var(--bg-card);
+  border-radius: 12px;
+  padding: 14px;
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+}
+
+.field-status-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  font-size: 0.8rem;
+}
+
+.field-status-count {
+  background: var(--primary-light);
+  color: var(--primary);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.field-sections-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.field-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border-left: 3px solid var(--border);
+}
+
+.field-section-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.field-status-legend {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  justify-content: center;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.legend-dot.completed { background: var(--success); }
+.legend-dot.incomplete { background: var(--error); }
+.legend-dot.optional { background: #d1d5db; }
+
+.field-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  margin: 0 -8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.field-item:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.field-indicator {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: white;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.field-indicator.completed {
+  background: var(--success);
+}
+
+.field-indicator.failed {
+  background: var(--error);
+}
+
+.field-indicator.incomplete {
+  background: var(--error);
+}
+
+.field-indicator.optional {
+  background: #d1d5db;
+}
+
+.field-name {
+  flex: 1;
+  font-size: 0.8rem;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.field-name.failed {
+  color: var(--error);
+}
+
+.field-meta {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* Summary stats bar */
+.progress-summary {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 0.75rem;
+}
+
+.progress-summary-item {
+  flex: 1;
+  text-align: center;
+}
+
+.progress-summary-value {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--text);
+}
+
+.progress-summary-label {
+  color: var(--text-muted);
+  margin-top: 2px;
 }

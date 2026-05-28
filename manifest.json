@@ -45,7 +45,8 @@
     "*://*.ashbyhq.com/*",
     "*://workforcenow.adp.com/*",
     "*://jobs.jobvite.com/*",
-    "*://*.rippling-ats.com/*"
+    "*://*.rippling-ats.com/*",
+    "*://ats.rippling.com/*"
   ],
   "background": {
     "service_worker": "src/background/background.js"
@@ -88,7 +89,8 @@
         "*://*.ashbyhq.com/*",
         "*://workforcenow.adp.com/*",
         "*://jobs.jobvite.com/*",
-        "*://*.rippling-ats.com/*"
+        "*://*.rippling-ats.com/*",
+        "*://ats.rippling.com/*"
       ],
       "js": [
         "src/core/resumeProcessor.js",

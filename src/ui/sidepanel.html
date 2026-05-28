@@ -168,19 +168,6 @@
         Autofill
       </button>
 
-      <!-- Completion Progress Widget - Below Autofill Button -->
-      <div class="widget-card completion-widget hidden" id="completionWidget">
-        <div class="completion-header">
-          <span class="completion-label">Completion</span>
-          <span class="completion-percentage" id="completionPercentage">0%</span>
-        </div>
-        <div class="completion-bar-container">
-          <div class="completion-bar" id="completionBar" style="width: 0%"></div>
-        </div>
-        <div class="completion-details" id="completionDetails">
-          <span class="completion-text" id="completionText">0 out of 0 required fields filled</span>
-        </div>
-      </div>
 
       <!-- Secondary Actions - Below Main Button -->
       <div style="margin-top: 20px;">
@@ -244,28 +231,55 @@
           </div>
         </div>
 
-        <!-- Failures/Needs Review Alert -->
-        <div id="reviewAlert" class="review-alert hidden">
-          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-              <line x1="12" y1="9" x2="12" y2="13"></line>
-              <line x1="12" y1="17" x2="12.01" y2="17"></line>
-            </svg>
-            <strong>Manual Review Required</strong>
+
+        <!-- Detailed Field Completion Status -->
+        <div id="fieldStatusSection" class="field-status-section hidden">
+          <div class="field-status-header">
+            <h4 style="margin: 0; font-size: 0.9rem; color: var(--text); font-weight: 600;">Field Status Tracking</h4>
+            <span id="fieldStatusCount" class="field-status-count" style="font-size: 0.75rem; color: var(--text-muted);">0/0</span>
           </div>
-          <button id="viewFieldsBtn" class="view-fields-btn">View Fields</button>
+          
+          <!-- Legend -->
+          <div class="field-status-legend">
+            <div class="legend-item">
+              <div class="legend-dot completed"></div> Completed
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot incomplete"></div> Required
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot optional"></div> Optional
+            </div>
+          </div>
+
+          <div id="fieldSectionsContainer" class="field-sections-container">
+            <!-- Sections will be populated here -->
+          </div>
         </div>
       </div>
 
-      <!-- Application History -->
-      <div class="history-section">
-        <div class="history-header">
-          <h3 style="margin: 0; font-size: 0.85rem; color: var(--text); font-weight: 600;">Recent Applications</h3>
-          <button id="clearHistoryBtn" class="clear-history-btn">Clear</button>
+      <!-- Detailed Field Info Modal -->
+      <div id="fieldInfoModal" class="modal hidden">
+        <div class="modal-content field-info-modal">
+          <div class="modal-header">
+            <h3 style="margin: 0;">Form Field Details</h3>
+            <button id="closeFieldModal" class="close-modal-btn">&times;</button>
+          </div>
+          <div id="fieldInfoContent" style="padding: 16px; max-height: 400px; overflow-y: auto;">
+            <!-- Field details will be populated here -->
+          </div>
         </div>
-        <div id="historyList" class="history-list-compact"></div>
       </div>
+    </div>
+
+    <!-- Application History -->
+    <div class="history-section">
+      <div class="history-header">
+        <h3 style="margin: 0; font-size: 0.85rem; color: var(--text); font-weight: 600;">Recent Applications</h3>
+        <button id="clearHistoryBtn" class="clear-history-btn">Clear</button>
+      </div>
+      <div id="historyList" class="history-list-compact"></div>
+    </div>
     </div>
 
     <!-- Manage Information Dashboard (Modal) -->

@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'taleo.net', 'successfactors.com', 'personio.com', 'recruitee.com',
         'teamtailor.com', 'ultipro.com', 'ukg.com', 'paycomonline.net',
         'paychex.com', 'oraclecloud.com', 'brassring.com', 'adp.com',
-        'jobvite.com', 'rippling-ats.com'
+        'jobvite.com', 'rippling-ats.com', 'ats.rippling.com'
     ];
 
     // Setup View Elements
@@ -94,10 +94,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const jobMeta = document.getElementById('jobMeta');
 
     const viewAutofillInfoBtn = document.getElementById('viewAutofillInfoBtn');
-    const completionWidget = document.getElementById('completionWidget');
-    const completionPercentage = document.getElementById('completionPercentage');
-    const completionBar = document.getElementById('completionBar');
-    const completionText = document.getElementById('completionText');
+
+    // Resume file info elements
+    const resumeFileName = document.getElementById('resumeFileName');
+    const resumeFileSize = document.getElementById('resumeFileSize');
 
     // Initialize UI state
     async function init() {
@@ -547,7 +547,6 @@ document.addEventListener('DOMContentLoaded', () => {
         editSection.classList.add('hidden');
         jsonSection.classList.add('hidden');
         settingsSection.classList.add('hidden');
-        if (trackingSection) trackingSection.classList.add('hidden');
 
         if (section === 'edit') {
             editSection.classList.remove('hidden');
@@ -555,8 +554,6 @@ document.addEventListener('DOMContentLoaded', () => {
             populateEditForms();
         } else if (section === 'json') {
             jsonSection.classList.remove('hidden');
-        } else if (section === 'tracking') {
-            if (trackingSection) trackingSection.classList.remove('hidden');
         } else if (section === 'settings') {
             settingsSection.classList.remove('hidden');
         }
@@ -1196,20 +1193,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // === PROGRESS TRACKING ===
 
-    chrome.runtime.onMessage.addListener((msg) => {
-        try {
-            if (msg.action === 'update_progress') {
-                const { filled, total } = msg;
-                progressSection.classList.remove('hidden');
-                progressCount.textContent = `${filled}/${total} fields`;
-                const percentage = total > 0 ? Math.round((filled / total) * 100) : 0;
-                progressBar.style.width = `${percentage}%`;
-            }
-        } catch (error) {
-            console.error('[Sidepanel] Progress update error:', error);
-        }
-    });
-
     // === STORAGE CHANGE LISTENER ===
 
     chrome.storage.onChanged.addListener((changes, namespace) => {
@@ -1239,7 +1222,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const sessionInfo = document.getElementById('sessionInfo');
     const sessionAts = document.getElementById('sessionAts');
     const sessionStart = document.getElementById('sessionStart');
-    const reviewAlert = document.getElementById('reviewAlert');
     const viewFieldsBtn = document.getElementById('viewFieldsBtn');
 
     // Tracking dashboard elements
@@ -1265,6 +1247,8 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             if (msg.action === 'update_progress') {
                 updateProgressDisplay(msg);
+                } else if (msg.action === 'tracking_completed') {
+                    updateFieldStatusDisplay();
             } else if (msg.action === 'session_started') {
                 handleSessionStarted(msg.session);
             } else if (msg.action === 'session_ended') {
@@ -1294,41 +1278,163 @@ document.addEventListener('DOMContentLoaded', () => {
         if (statFailed) statFailed.textContent = failed || 0;
         if (statNeedsReview) statNeedsReview.textContent = needs_review || 0;
 
-        // Show alert if there are failures or needs review
-        if ((failed > 0 || needs_review > 0) && reviewAlert) {
-            reviewAlert.classList.remove('hidden');
-        }
-
         // Update tracking dashboard if open
         if (trackingCompletion) {
             trackingCompletion.textContent = `${percentage}%`;
         }
-
-        // Update completion widget
-        updateCompletionWidget(filled, total, percentage);
     }
 
-    // Update completion widget
-    function updateCompletionWidget(filled, total, percentage) {
-        if (!completionWidget) return;
+    // Fetch and display detailed field status
+    function updateFieldStatusDisplay() {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (!tabs || !tabs[0]) return;
 
-        if (total > 0) {
-            completionWidget.classList.remove('hidden');
+            chrome.tabs.sendMessage(tabs[0].id, { action: 'get_form_fields' }, (response) => {
+                if (chrome.runtime.lastError || !response) {
+                    console.error('[Sidepanel] Error getting form fields:', chrome.runtime.lastError);
+                    return;
+                }
 
-            if (completionPercentage) {
-                completionPercentage.textContent = `${percentage}%`;
-            }
+                const fieldStatusSection = document.getElementById('fieldStatusSection');
+                const fieldSectionsContainer = document.getElementById('fieldSectionsContainer');
+                const fieldStatusCount = document.getElementById('fieldStatusCount');
+                
+                if (!fieldStatusSection || !fieldSectionsContainer) return;
 
-            if (completionBar) {
-                completionBar.style.width = `${percentage}%`;
-            }
+                const fields = response.fields || [];
+                if (fields.length === 0) return;
 
-            if (completionText) {
-                const required = total; // Assuming all detected fields are required for now
-                completionText.textContent = `${filled} out of ${required} required fields filled`;
-            }
-        }
+                fieldStatusSection.classList.remove('hidden');
+
+                // Group fields by category/section
+                const sections = groupFieldsBySection(fields);
+                
+                // Create HTML for sections
+                let html = '';
+                let completedCount = 0;
+
+                Object.entries(sections).forEach(([sectionName, fieldList]) => {
+                    html += `<div class="field-section">`;
+                    html += `<div class="field-section-title">${sectionName}</div>`;
+                    
+                    fieldList.forEach(field => {
+                        const statusClass = getFieldStatusClass(field);
+                        const statusIcon = getFieldStatusIcon(field);
+                        const isCompleted = field.status === 'filled';
+                        
+                        if (isCompleted) completedCount++;
+                        
+                        html += `
+                            <div class="field-item" data-scroll-id="${field.scrollId}" title="Click to view this field">
+                                <div class="field-indicator ${statusClass}">${statusIcon}</div>
+                                <div class="field-name ${field.status === 'failed' ? 'failed' : ''}">
+                                    ${field.label}
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    html += `</div>`;
+                });
+
+                fieldSectionsContainer.innerHTML = html;
+                fieldStatusCount.textContent = `${completedCount}/${fields.length}`;
+
+                // Add click listeners to auto-scroll to the field on the page
+                const fieldItems = fieldSectionsContainer.querySelectorAll('.field-item');
+                fieldItems.forEach(item => {
+                    item.addEventListener('click', () => {
+                        const scrollId = item.getAttribute('data-scroll-id');
+                        if (scrollId) {
+                            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                                if (tabs && tabs[0]) {
+                                    chrome.tabs.sendMessage(tabs[0].id, { action: 'scroll_to_field', scrollId: scrollId });
+                                }
+                            });
+                        }
+                    });
+                });
+            });
+        });
     }
+
+    // Group fields by section/category
+    function groupFieldsBySection(fields) {
+        const sections = {
+            'Documents': [],
+            'Legal & EEO': [],
+            'Education': [],
+            'Work Experience': [],
+            'Contact': [],
+            'Personal': [],
+            'Skills': [],
+            'Other': []
+        };
+
+        fields.forEach(field => {
+            const label = field.label || field.id || '';
+            const labelLower = label.toLowerCase();
+
+            // 1. Documents
+            if (labelLower.match(/\b(resume|cv|cover letter|transcript|attachment|document|file|upload)\b/)) {
+                sections['Documents'].push(field);
+            } 
+            // 2. Legal & EEO (Evaluate before Work/Personal to catch "work authorization")
+            else if (labelLower.match(/\b(veteran|disability|eeo|eeoc|equal opportunity|protected|accommodation|legal|consent|agreement|policy|sponsorship|visa|authorized to work|authorization|citizenship|clearance|gender|sex|race|ethnicity|hispanic|latino|identify)\b/)) {
+                sections['Legal & EEO'].push(field);
+            } 
+            // 3. Education (Evaluate before Personal to catch "University Name")
+            else if (labelLower.match(/\b(school|university|college|degree|major|gpa|graduation|education|study|academic)\b/)) {
+                sections['Education'].push(field);
+            } 
+            // 4. Work Experience (Evaluate before Personal to catch "Company Name")
+            else if (labelLower.match(/\b(job|company|employer|experience|employment|work|salary|current role|previous role|industry|department)\b/)) {
+                sections['Work Experience'].push(field);
+            } 
+            // 5. Contact / Links
+            else if (labelLower.match(/\b(linkedin|website|portfolio|github|social|url|link)\b/)) {
+                sections['Contact'].push(field);
+            } 
+            // 6. Personal (Evaluated late to act as a catch-all for names/locations)
+            else if (labelLower.match(/\b(first|last|full|name|email|phone|mobile|tel|address|city|state|zip|postal|country|age|dob|birth|location)\b/)) {
+                sections['Personal'].push(field);
+            } 
+            // 7. Skills
+            else if (labelLower.match(/\b(skill|language|certification|technical|programming|software)\b/)) {
+                sections['Skills'].push(field);
+            } 
+            // 8. Other
+            else {
+                sections['Other'].push(field);
+            }
+        });
+
+        // Remove empty sections
+        Object.keys(sections).forEach(key => {
+            if (sections[key].length === 0) delete sections[key];
+        });
+
+        return sections;
+    }
+
+    // Get CSS class for field status
+    function getFieldStatusClass(field) {
+        const status = field.status || 'detected';
+        
+        if (status === 'filled') return 'completed';
+        if (!field.required && status !== 'failed') return 'optional';
+        return 'incomplete';
+    }
+
+    // Get status icon text
+    function getFieldStatusIcon(field) {
+        const status = field.status || 'detected';
+        
+        if (status === 'filled') return '✓';
+        if (status === 'failed') return '✕';
+        return '';
+    }
+
 
     function handleSessionStarted(session) {
         if (sessionInfo) {

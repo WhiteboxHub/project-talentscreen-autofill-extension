@@ -221,32 +221,29 @@ const DynamicFormWatcher = {
    * @param {HTMLElement[]} fields
    */
   async handleNewFields(fields) {
-    // Notify TrackingIntegration if available (it handles fieldId/fieldData generation correctly)
-    if (window.TrackingIntegration && typeof window.TrackingIntegration.trackField === 'function') {
+    // Notify FormTracker via TrackingIntegration if available, or directly if session exists
+    if (window.TrackingIntegration && window.TrackingIntegration.initialized) {
       fields.forEach(field => {
-        try {
-          window.TrackingIntegration.trackField(field);
-        } catch (error) {
-          console.error('[DynamicFormWatcher] Error registering field via TrackingIntegration:', error);
-        }
+        window.TrackingIntegration.trackField(field);
       });
-    } else if (window.FormTracker && typeof window.FormTracker.registerField === 'function') {
-      // Fallback: build proper fieldId + fieldData before calling registerField directly
+    } else if (window.FormTracker && typeof window.FormTracker.registerField === 'function' && window.FormTracker.getCurrentSession()) {
       fields.forEach(field => {
         try {
-          const fieldId = field.id ? `id:${field.id}` :
-                          field.name ? `name:${field.name}` :
-                          `field_${Array.from(document.querySelectorAll('input, select, textarea')).indexOf(field)}`;
-          const fieldData = {
-            label: field.getAttribute('aria-label') || field.placeholder || field.name || field.id || 'unknown',
+          const fieldId = this.getFieldId(field);
+          
+          // Try to grab label text to check for asterisk
+          let labelText = field.name || field.id || 'unknown';
+          const parentLabel = field.closest('label');
+          if (parentLabel) labelText = parentLabel.innerText;
+          
+          const isRequired = field.required || field.getAttribute('aria-required') === 'true' || 
+                             labelText.includes('*') || (field.type === 'file' && labelText.toLowerCase().includes('resume'));
+                             
+          window.FormTracker.registerField(fieldId, {
+            label: labelText,
             type: field.type || field.tagName.toLowerCase(),
-            required: field.required || field.hasAttribute('required'),
-            selector: field.id ? `#${field.id}` : field.name ? `[name="${field.name}"]` : field.tagName.toLowerCase(),
-            confidence: 1.0,
-            name: field.name,
-            id: field.id
-          };
-          window.FormTracker.registerField(fieldId, fieldData);
+            required: isRequired
+          });
         } catch (error) {
           console.error('[DynamicFormWatcher] Error registering field:', error);
         }
@@ -335,8 +332,9 @@ const DynamicFormWatcher = {
     // Skip hidden inputs
     if (field.type === 'hidden') return false;
 
-    // Skip if not visible
-    if (!this.isFieldVisible(field)) return false;
+    // File inputs inside React dropzones are often visually hidden (opacity 0, display none)
+    // We MUST track them as valid fields!
+    if (field.type !== 'file' && !this.isFieldVisible(field)) return false;
 
     // Skip if disabled
     if (field.disabled) return false;
