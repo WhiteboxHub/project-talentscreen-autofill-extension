@@ -47,7 +47,7 @@ function isATSSite(url) {
     'taleo.net', 'successfactors.com', 'personio.com', 'recruitee.com',
     'teamtailor.com', 'ultipro.com', 'ukg.com', 'paycomonline.net',
     'paychex.com', 'oraclecloud.com', 'brassring.com', 'adp.com',
-    'jobvite.com', 'rippling-ats.com'
+    'jobvite.com', 'rippling-ats.com', 'silkroad.com'
   ];
   return jobBoards.some(board => urlLower.includes(board));
 }

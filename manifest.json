@@ -45,7 +45,8 @@
     "*://*.ashbyhq.com/*",
     "*://workforcenow.adp.com/*",
     "*://jobs.jobvite.com/*",
-    "*://*.rippling-ats.com/*"
+    "*://*.rippling-ats.com/*",
+    "*://*.silkroad.com/*"
   ],
   "background": {
     "service_worker": "src/background/background.js"
@@ -88,7 +89,8 @@
         "*://*.ashbyhq.com/*",
         "*://workforcenow.adp.com/*",
         "*://jobs.jobvite.com/*",
-        "*://*.rippling-ats.com/*"
+        "*://*.rippling-ats.com/*",
+        "*://*.silkroad.com/*"
       ],
       "js": [
         "src/core/resumeProcessor.js",
@@ -122,6 +124,7 @@
         "src/content/atsStrategies/personioStrategy.js",
         "src/content/atsStrategies/recruiteeStrategy.js",
         "src/content/atsStrategies/ripplingStrategy.js",
+        "src/content/atsStrategies/silkroadStrategy.js",
         "src/content/atsStrategies/smartrecruitersStrategy.js",
         "src/content/atsStrategies/successfactorsStrategy.js",
         "src/content/atsStrategies/taleoStrategy.js",
