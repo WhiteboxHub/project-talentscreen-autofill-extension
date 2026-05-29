@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'teamtailor.com', 'ultipro.com', 'ukg.com', 'paycomonline.net',
         'paychex.com', 'oraclecloud.com', 'brassring.com', 'adp.com',
         'jobvite.com', 'rippling-ats.com', 'ats.rippling.com'
+        'jobvite.com', 'rippling-ats.com', 'silkroad.com'
     ];
 
     // Setup View Elements

@@ -468,6 +468,7 @@ const JobMetadataExtractor = {
     if (url.includes('bamboohr.com')) return 'bamboohr';
     if (url.includes('ashbyhq.com')) return 'ashby';
     if (url.includes('indeed.com')) return 'indeed';
+    if (url.includes('silkroad.com')) return 'silkroad';
 
     return 'unknown';
   },
