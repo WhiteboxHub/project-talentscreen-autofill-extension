@@ -1,7 +1,12 @@
 /**
  * smartrecruitersStrategy.js
  * Strategy for SmartRecruiters application forms (React SPA)
- * Enhanced with form stabilization, React input support, and mutation observer
+ * Enhanced with Shadow DOM traversal, form stabilization, React input support,
+ * and mutation observer.
+ *
+ * KEY FIX: SmartRecruiters uses Shadow DOM to encapsulate form fields.
+ * Standard document.querySelectorAll cannot see inside shadow roots.
+ * This strategy now recursively traverses all open shadow roots.
  */
 class SmartRecruitersStrategy extends GenericStrategy {
     constructor() {
@@ -12,11 +17,11 @@ class SmartRecruitersStrategy extends GenericStrategy {
             confidenceThreshold: 50,
             maxRetries: 3,
             retryDelay: 150,
-            formStabilizationWait: 3000,
-            formStabilizationCheckInterval: 300,
-            minFieldsThreshold: 3,
+            formStabilizationWait: 5000,
+            formStabilizationCheckInterval: 400,
+            minFieldsThreshold: 2,
             mutationObserverTimeout: 30000,
-            secondPassDelay: 2000,
+            secondPassDelay: 2500,
             debug: this.isDebugMode()
         };
 
@@ -41,8 +46,156 @@ class SmartRecruitersStrategy extends GenericStrategy {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
+    // =========================================================================
+    //  SHADOW DOM TRAVERSAL — The core fix for SmartRecruiters
+    // =========================================================================
+
     /**
-     * Wait for SPA form to stabilize
+     * Recursively query all elements matching a selector, including those
+     * inside open Shadow DOM boundaries.
+     * @param {string} selector - CSS selector to match
+     * @param {Node} root - Starting node (defaults to document)
+     * @returns {Element[]} Array of all matching elements, including those in shadow roots
+     */
+    querySelectorAllDeep(selector, root = document) {
+        const results = [];
+
+        // 1. Query elements in the current root
+        try {
+            const matches = root.querySelectorAll(selector);
+            results.push(...matches);
+        } catch (e) {
+            // Shadow roots that don't support querySelectorAll
+        }
+
+        // 2. Find all elements that may host a shadow root
+        const allElements = root.querySelectorAll ? root.querySelectorAll('*') : [];
+        for (const el of allElements) {
+            if (el.shadowRoot) {
+                // Recurse into the shadow root
+                const shadowMatches = this.querySelectorAllDeep(selector, el.shadowRoot);
+                results.push(...shadowMatches);
+            }
+        }
+
+        // 3. Also check slots — slotted content lives in the light DOM
+        //    but may reference labels in the shadow DOM
+        return results;
+    }
+
+    /**
+     * Get the closest ancestor matching a selector, crossing shadow DOM boundaries.
+     * @param {Element} element
+     * @param {string} selector
+     * @returns {Element|null}
+     */
+    closestDeep(element, selector) {
+        let current = element;
+        while (current) {
+            // Try standard closest
+            if (current.closest) {
+                const result = current.closest(selector);
+                if (result) return result;
+            }
+
+            // Cross shadow boundary — go to the shadow host
+            const root = current.getRootNode();
+            if (root instanceof ShadowRoot) {
+                current = root.host;
+            } else {
+                break;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Get label text for an element, searching up through shadow DOM boundaries.
+     * SmartRecruiters often puts labels in <slot> elements or separate shadow subtrees.
+     * @param {Element} field
+     * @returns {string}
+     */
+    getLabelDeep(field) {
+        const labels = [];
+
+        // 1. Standard label associations
+        if (field.labels && field.labels.length > 0) {
+            for (const lbl of field.labels) {
+                labels.push(lbl.textContent.trim());
+            }
+        }
+
+        // 2. label[for] in same root
+        if (field.id) {
+            const root = field.getRootNode();
+            const lbl = root.querySelector?.(`label[for="${field.id}"]`);
+            if (lbl) labels.push(lbl.textContent.trim());
+        }
+
+        // 3. Wrapping <label>
+        const wrappingLabel = this.closestDeep(field, 'label');
+        if (wrappingLabel) labels.push(wrappingLabel.textContent.trim());
+
+        // 4. aria-label / aria-labelledby
+        const ariaLabel = field.getAttribute('aria-label');
+        if (ariaLabel) labels.push(ariaLabel);
+
+        const labelledBy = field.getAttribute('aria-labelledby');
+        if (labelledBy) {
+            const root = field.getRootNode();
+            const lblEl = root.getElementById?.(labelledBy) || document.getElementById(labelledBy);
+            if (lblEl) labels.push(lblEl.textContent.trim());
+        }
+
+        // 5. Walk up through shadow boundaries to find contextual label text
+        let container = field.parentElement;
+        let depth = 0;
+        while (container && depth < 5) {
+            // Look for label, legend, or heading in this container
+            const labelEl = container.querySelector?.('label, legend, h3, h4, .field-label, [class*="label"], [class*="question"]');
+            if (labelEl && labelEl !== field) {
+                labels.push(labelEl.textContent.trim());
+            }
+
+            // Check the container's own text (if it's short enough to be a label)
+            const directText = this._getDirectTextContent(container);
+            if (directText && directText.length > 0 && directText.length < 200) {
+                labels.push(directText);
+            }
+
+            container = container.parentElement;
+            if (!container) {
+                // Try crossing shadow boundary
+                const root = (depth === 0 ? field : container || field).getRootNode();
+                if (root instanceof ShadowRoot) {
+                    container = root.host;
+                }
+            }
+            depth++;
+        }
+
+        return labels.filter(Boolean).join(' ');
+    }
+
+    /**
+     * Get only the direct text content of an element (not its children's text).
+     */
+    _getDirectTextContent(element) {
+        let text = '';
+        for (const node of element.childNodes) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                text += node.textContent;
+            }
+        }
+        return text.trim();
+    }
+
+    // =========================================================================
+    //  FIELD DETECTION — Uses deep traversal
+    // =========================================================================
+
+    /**
+     * Wait for SPA form to stabilize, using deep DOM traversal
      */
     async waitForFormStabilization() {
         this.log('Waiting for form stabilization...');
@@ -77,7 +230,7 @@ class SmartRecruitersStrategy extends GenericStrategy {
     }
 
     /**
-     * Detect all form fields
+     * Detect all form fields, including those inside Shadow DOM.
      */
     detectFields() {
         const selectors = [
@@ -97,47 +250,62 @@ class SmartRecruitersStrategy extends GenericStrategy {
             '[contenteditable="true"]'
         ];
 
-        const fields = Array.from(document.querySelectorAll(selectors.join(',')))
-            .filter(field => {
-                // Skip hidden fields
-                if (field.type === 'hidden') return false;
-                if (field.offsetParent === null && field.type !== 'radio' && field.type !== 'checkbox') return false;
+        // Use deep traversal to find fields inside shadow DOM
+        let allFields = [];
+        for (const selector of selectors) {
+            const found = this.querySelectorAllDeep(selector);
+            allFields.push(...found);
+        }
 
-                // Skip already filled fields (unless radio/checkbox)
-                if (field.type !== 'radio' && field.type !== 'checkbox') {
-                    if (field.value && field.value.trim() !== '') return false;
-                }
+        // Deduplicate
+        allFields = [...new Set(allFields)];
 
-                return true;
-            });
+        const fields = allFields.filter(field => {
+            // Skip hidden fields
+            if (field.type === 'hidden') return false;
+
+            // Visibility check — must be in the layout
+            // For shadow DOM elements, offsetParent may be null even if visible,
+            // so we also check getBoundingClientRect
+            const isVisible = field.offsetParent !== null ||
+                field.type === 'radio' ||
+                field.type === 'checkbox' ||
+                (field.getBoundingClientRect && field.getBoundingClientRect().height > 0);
+            if (!isVisible) return false;
+
+            // Skip already filled fields (unless radio/checkbox)
+            if (field.type !== 'radio' && field.type !== 'checkbox') {
+                if (field.value && field.value.trim() !== '') return false;
+            }
+
+            return true;
+        });
 
         return fields;
     }
 
+    // =========================================================================
+    //  FEATURE EXTRACTION — Shadow DOM aware
+    // =========================================================================
+
     /**
-     * Extract enhanced features from field
+     * Extract enhanced features from field, crossing shadow DOM boundaries
      */
     extractFeatures(field) {
         const features = [];
 
-        // Get label text
-        const labelElement = field.labels?.[0] ||
-            document.querySelector(`label[for="${field.id}"]`) ||
-            field.closest('label') ||
-            field.closest('.form-group, .field-group, [class*="field"], [class*="input"]')?.querySelector('label');
+        // Get label text using our deep label finder
+        const labelText = this.getLabelDeep(field);
+        if (labelText) features.push(labelText);
 
-        if (labelElement) {
-            features.push(labelElement.textContent.trim());
-        }
-
-        // Get all attributes
+        // Get all standard attributes
         ['aria-label', 'placeholder', 'name', 'id', 'data-testid', 'data-test', 'autocomplete', 'title'].forEach(attr => {
             const value = field.getAttribute(attr);
             if (value) features.push(value);
         });
 
-        // Get surrounding text (question labels)
-        const parent = field.closest('[class*="question"], [class*="field"], .form-group');
+        // Get surrounding text from parent container (with shadow DOM awareness)
+        const parent = this.closestDeep(field, '[class*="question"], [class*="field"], .form-group, [class*="section"]');
         if (parent) {
             const text = parent.textContent;
             if (text && text.length < 500) {
@@ -147,6 +315,10 @@ class SmartRecruitersStrategy extends GenericStrategy {
 
         return features.join(' ').toLowerCase().replace(/\s+/g, ' ').trim();
     }
+
+    // =========================================================================
+    //  FIELD MATCHING
+    // =========================================================================
 
     /**
      * Find best match for field
@@ -231,6 +403,10 @@ class SmartRecruitersStrategy extends GenericStrategy {
                     return { value: workAuth, confidence: 95, key: 'work_auth_yes' };
                 }
             }
+            // For text/select inputs, return "Yes"
+            if (fieldType !== 'radio' && fieldType !== 'checkbox') {
+                return { value: data.identity?.authorized_to_work || 'Yes', confidence: 95, key: 'work_auth' };
+            }
         }
 
         // Sponsorship (radio/checkbox) - use custom_fields
@@ -247,6 +423,9 @@ class SmartRecruitersStrategy extends GenericStrategy {
                 if (text.includes('yes') || field.value === '1' || field.value.toLowerCase() === 'yes') {
                     return { value: needsSponsorship, confidence: 95, key: 'sponsorship_yes' };
                 }
+            }
+            if (fieldType !== 'radio' && fieldType !== 'checkbox') {
+                return { value: data.identity?.sponsorship_required || 'No', confidence: 95, key: 'sponsorship' };
             }
         }
 
@@ -335,8 +514,17 @@ class SmartRecruitersStrategy extends GenericStrategy {
             return { value: ethnicity, confidence: 80, key: 'ethnicity' };
         }
 
+        // How did you hear about this job
+        if (text.includes('how did you hear') || text.includes('how did you find') || text.includes('source')) {
+            return { value: data.summary?.source || 'LinkedIn', confidence: 75, key: 'source' };
+        }
+
         return { value: null, confidence: 0, key: null };
     }
+
+    // =========================================================================
+    //  FIELD FILLING — React-aware + Shadow DOM aware
+    // =========================================================================
 
     /**
      * Fill a single field with React support and verification
@@ -367,7 +555,7 @@ class SmartRecruitersStrategy extends GenericStrategy {
                 if (match.value === true) {
                     field.click();
                     field.checked = true;
-                    field.dispatchEvent(new Event('change', { bubbles: true }));
+                    field.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
                     this.filledFields.add(fieldId);
                     return { success: true, method: 'radio' };
                 }
@@ -379,7 +567,7 @@ class SmartRecruitersStrategy extends GenericStrategy {
                 if (match.value === true) {
                     field.click();
                     field.checked = true;
-                    field.dispatchEvent(new Event('change', { bubbles: true }));
+                    field.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
                     this.filledFields.add(fieldId);
                     return { success: true, method: 'checkbox' };
                 }
@@ -396,7 +584,7 @@ class SmartRecruitersStrategy extends GenericStrategy {
 
                 if (option) {
                     field.value = option.value;
-                    field.dispatchEvent(new Event('change', { bubbles: true }));
+                    field.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
                     this.filledFields.add(fieldId);
                     return { success: true, method: 'select' };
                 }
@@ -414,32 +602,79 @@ class SmartRecruitersStrategy extends GenericStrategy {
                 return result;
             }
 
+            // Handle contenteditable elements
+            if (field.getAttribute('contenteditable') === 'true' || field.getAttribute('role') === 'textbox') {
+                field.focus();
+                field.textContent = match.value;
+                field.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                field.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+                field.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+                this.filledFields.add(fieldId);
+                return { success: true, method: 'contenteditable' };
+            }
+
             // Handle regular text inputs with React support
+            // Use the native setter approach to bypass React's value interception
+            const proto = field.tagName === 'TEXTAREA'
+                ? window.HTMLTextAreaElement.prototype
+                : window.HTMLInputElement.prototype;
+            const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+
+            if (nativeSetter) {
+                nativeSetter.call(field, match.value);
+            } else {
+                field.value = match.value;
+            }
+
+            // Clear React's internal value tracker so it sees the change
+            const tracker = field._valueTracker;
+            if (tracker) {
+                tracker.setValue('');
+            }
+
+            // Dispatch events with composed:true to cross shadow DOM boundaries
+            field.dispatchEvent(new Event('focus', { bubbles: true, composed: true }));
+            field.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+            field.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+            field.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+
+            // Verify the value stuck
+            await this.sleep(50);
+            if (field.value === match.value) {
+                this.filledFields.add(fieldId);
+                return { success: true, method: 'native_setter' };
+            }
+
+            // Retry with ReactInputHelper if available
             if (typeof ReactInputHelper !== 'undefined') {
                 const result = await ReactInputHelper.fillWithVerification(field, match.value, {
                     maxRetries: this.config.maxRetries,
                     retryDelay: this.config.retryDelay
                 });
-
                 if (result.success) {
                     this.filledFields.add(fieldId);
                 }
                 return result;
-            } else {
-                // Fallback without React helper
-                field.value = match.value;
-                field.dispatchEvent(new Event('input', { bubbles: true }));
-                field.dispatchEvent(new Event('change', { bubbles: true }));
-                field.dispatchEvent(new Event('blur', { bubbles: true }));
-                this.filledFields.add(fieldId);
-                return { success: true, method: 'fallback' };
             }
+
+            // Value may have been accepted even if it doesn't match exactly
+            // (e.g., formatted phone numbers)
+            if (field.value && field.value.trim() !== '') {
+                this.filledFields.add(fieldId);
+                return { success: true, method: 'partial' };
+            }
+
+            return { success: false, reason: 'Value did not persist' };
 
         } catch (error) {
             this.log('Error filling field:', error);
             return { success: false, error: error.message };
         }
     }
+
+    // =========================================================================
+    //  AUTOFILL EXECUTION
+    // =========================================================================
 
     /**
      * Perform autofill pass
@@ -475,31 +710,77 @@ class SmartRecruitersStrategy extends GenericStrategy {
     }
 
     /**
-     * Start mutation observer for dynamically added fields
+     * Start mutation observer for dynamically added fields.
+     * Observes both the regular DOM and shadow roots.
      */
     startMutationObserver(data, resumeFile) {
-        if (typeof MutationManager === 'undefined') {
-            this.log('MutationManager not available');
-            return;
+        this.log('Starting mutation observer for dynamic fields...');
+
+        const observerCallback = async (mutations) => {
+            let hasNewFields = false;
+
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType === Node.ELEMENT_NODE) {
+                        // Check if the added node contains form fields
+                        const fields = node.querySelectorAll?.('input, textarea, select, [role="combobox"], [role="textbox"]');
+                        if (fields && fields.length > 0) {
+                            hasNewFields = true;
+                        }
+
+                        // If a shadow root was attached, observe it too
+                        if (node.shadowRoot) {
+                            this._observeShadowRoot(node.shadowRoot, observerCallback);
+                        }
+                    }
+                }
+            }
+
+            if (hasNewFields) {
+                this.log('New form fields detected via mutation observer');
+                await this.sleep(500); // Wait for fields to fully render
+                await this.autofillPass(data, resumeFile, 'mutation');
+            }
+        };
+
+        const observer = new MutationObserver(observerCallback);
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        // Also observe existing shadow roots
+        const allElements = document.querySelectorAll('*');
+        for (const el of allElements) {
+            if (el.shadowRoot) {
+                this._observeShadowRoot(el.shadowRoot, observerCallback);
+            }
         }
 
-        this.log('Starting mutation observer...');
+        // Auto-disconnect after timeout
+        setTimeout(() => {
+            observer.disconnect();
+            this.log('Mutation observer disconnected (timeout)');
+        }, this.config.mutationObserverTimeout);
+    }
 
-        MutationManager.start(
-            async (newFields) => {
-                this.log(`Mutation observer detected ${newFields.length} new fields`);
+    /**
+     * Observe a shadow root for mutations
+     */
+    _observeShadowRoot(shadowRoot, callback) {
+        try {
+            const observer = new MutationObserver(callback);
+            observer.observe(shadowRoot, {
+                childList: true,
+                subtree: true
+            });
 
-                for (const field of newFields) {
-                    await this.fillField(field, null, data);
-                    await this.sleep(50);
-                }
-            },
-            {
-                timeout: this.config.mutationObserverTimeout,
-                debounceDelay: 500,
-                debug: this.config.debug
-            }
-        );
+            // Store observer for cleanup
+            if (!this._shadowObservers) this._shadowObservers = [];
+            this._shadowObservers.push(observer);
+        } catch (e) {
+            this.log('Could not observe shadow root:', e.message);
+        }
     }
 
     getFieldIdentifier(field) {
@@ -517,7 +798,15 @@ class SmartRecruitersStrategy extends GenericStrategy {
                 this.log('Form did not stabilize, proceeding anyway...');
             }
 
-            // First pass
+            // Also attempt the generic strategy for any standard DOM fields
+            // (this handles resume upload and basic fields outside shadow DOM)
+            try {
+                await super.execute(normalizedData, resumeFile);
+            } catch (e) {
+                this.log('Generic strategy pass completed with note:', e.message);
+            }
+
+            // First pass with deep traversal
             const firstPass = await this.autofillPass(normalizedData, resumeFile, 1);
 
             // Wait for potential dynamic fields
@@ -526,7 +815,7 @@ class SmartRecruitersStrategy extends GenericStrategy {
             // Second pass
             const secondPass = await this.autofillPass(normalizedData, resumeFile, 2);
 
-            // Start mutation observer
+            // Start mutation observer for fields that appear later
             this.startMutationObserver(normalizedData, resumeFile);
 
             const totalFilled = firstPass.filled + secondPass.filled;

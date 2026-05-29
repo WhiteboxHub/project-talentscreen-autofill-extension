@@ -24,7 +24,6 @@ const AutofillTelemetry = {
             metadata: {
                 url: window.location.href,
                 atsType: metadata.atsType || 'unknown',
-                userAgent: navigator.userAgent,
                 ...metadata
             },
             metrics: {
