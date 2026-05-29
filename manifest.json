@@ -48,6 +48,8 @@
     "*://jobs.jobvite.com/*",
     "*://*.rippling-ats.com/*",
     "*://*.kforce.com/*"
+    "*://ats.rippling.com/*"
+    "*://*.silkroad.com/*"
   ],
   "background": {
     "service_worker": "src/background/background.js"
@@ -93,6 +95,8 @@
         "*://jobs.jobvite.com/*",
         "*://*.rippling-ats.com/*",
         "*://*.kforce.com/*"
+        "*://ats.rippling.com/*"
+        "*://*.silkroad.com/*"
       ],
       "js": [
         "src/core/resumeProcessor.js",
@@ -127,6 +131,7 @@
         "src/content/atsStrategies/personioStrategy.js",
         "src/content/atsStrategies/recruiteeStrategy.js",
         "src/content/atsStrategies/ripplingStrategy.js",
+        "src/content/atsStrategies/silkroadStrategy.js",
         "src/content/atsStrategies/smartrecruitersStrategy.js",
         "src/content/atsStrategies/successfactorsStrategy.js",
         "src/content/atsStrategies/taleoStrategy.js",

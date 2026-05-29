@@ -37,7 +37,7 @@ zip -r "$OUTPUT" . \
   -x "*.log" \
   -x "*.md" \
   -x "build.sh" \
-  -x "build.ps1" \
+  -x "build.bat" \
   -x "package*.json" \
   -x ".env*" \
   -x "*.txt" \

@@ -318,7 +318,7 @@ class ResumeProcessor {
 
             // Default EEO values
             const eeo = {
-                gender: "",
+                gender: "male",
                 ethnicity: "asian",
                 veteran_status: "no",
                 disability_status: "no",
@@ -357,8 +357,8 @@ class ResumeProcessor {
                 willing_to_relocate: "yes",
                 willing_to_travel: "yes",
                 screening_answers: {
-                    why_interested: "",
-                    why_good_fit: "",
+                    why_interested: "Driven by the challenge of architecting production-grade agentic workflows and scaling LLM infrastructure within enterprise environments.",
+                    why_good_fit: "Proven experience leading AI architecture at Lucid Motors and Yahoo, focusing on end-to-end MLOps and highly available distributed systems.",
                     ...(customFields.application_logistics?.screening_answers || {})
                 },
                 ...customFields.application_logistics
