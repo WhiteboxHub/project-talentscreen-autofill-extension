@@ -47,8 +47,8 @@
     "*://workforcenow.adp.com/*",
     "*://jobs.jobvite.com/*",
     "*://*.rippling-ats.com/*",
-    "*://*.kforce.com/*"
-    "*://ats.rippling.com/*"
+    "*://*.kforce.com/*",
+    "*://ats.rippling.com/*",
     "*://*.silkroad.com/*"
   ],
   "background": {
@@ -94,8 +94,8 @@
         "*://workforcenow.adp.com/*",
         "*://jobs.jobvite.com/*",
         "*://*.rippling-ats.com/*",
-        "*://*.kforce.com/*"
-        "*://ats.rippling.com/*"
+        "*://*.kforce.com/*",
+        "*://ats.rippling.com/*",
         "*://*.silkroad.com/*"
       ],
       "js": [
