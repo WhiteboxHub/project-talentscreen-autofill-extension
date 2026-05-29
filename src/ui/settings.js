@@ -43,6 +43,18 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentResumeFile = null;
     let originalData = null;
 
+    // Form Tracking Elements
+    const trackingHistoryList = document.getElementById('trackingHistoryList');
+    const clearTrackingHistoryBtn = document.getElementById('clearTrackingHistoryBtn');
+    const exportTrackingBtn = document.getElementById('exportTrackingBtn');
+
+    // Current Session Elements
+    const currentSessionCard = document.getElementById('currentSessionCard');
+    const trackingAts = document.getElementById('trackingAts');
+    const trackingCompany = document.getElementById('trackingCompany');
+    const trackingStartTime = document.getElementById('trackingStartTime');
+    const trackingCompletion = document.getElementById('trackingCompletion');
+
     // Initialize
     async function init() {
         // Load preferences
@@ -70,6 +82,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (hash) {
                 showSection(hash);
             }
+
+            // Load tracking history and check active session
+            loadTrackingHistory();
+            initCurrentSession();
         });
     }
 
@@ -630,6 +646,222 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast(`Debug mode ${enabled ? 'enabled' : 'disabled'}`, 'success');
         });
     }
+
+    // Helper: Determine if URL is an ATS site
+    function isATSSite(url) {
+        if (!url) return false;
+        const urlLower = url.toLowerCase();
+        const jobBoards = [
+            'greenhouse.io', 'lever.co', 'myworkdayjobs.com', 'workday.com',
+            'smartrecruiters.com', 'applytojob.com', 'ashbyhq.com', 'bamboohr.com',
+            'icims.com', 'indeed.com', 'linkedin.com/jobs', 'workable.com',
+            'taleo.net', 'successfactors.com', 'personio.com', 'recruitee.com',
+            'teamtailor.com', 'ultipro.com', 'ukg.com', 'paycomonline.net',
+            'paychex.com', 'oraclecloud.com', 'brassring.com', 'adp.com',
+            'jobvite.com', 'rippling-ats.com', 'ats.rippling.com',
+            'silkroad.com'
+        ];
+        return jobBoards.some(board => urlLower.includes(board));
+    }
+
+    // Helper: format time for UI
+    function formatTime(isoString) {
+        try {
+            const date = new Date(isoString);
+            return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        } catch (e) {
+            return '-';
+        }
+    }
+
+    // Load and render tracking history
+    function loadTrackingHistory() {
+        chrome.storage.local.get(['formTrackerHistory'], (result) => {
+            const history = (result.formTrackerHistory || []).slice(-10).reverse();
+            renderTrackingHistory(history);
+        });
+    }
+
+    function renderTrackingHistory(history) {
+        if (!trackingHistoryList) return;
+
+        if (history.length === 0) {
+            trackingHistoryList.innerHTML = '<p class="empty-state">No tracking history yet</p>';
+            return;
+        }
+
+        trackingHistoryList.innerHTML = history.map(session => `
+            <div class="tracking-history-item">
+                <div class="history-header">
+                    <strong>${session.company || session.atsType || 'Application'}</strong>
+                    <span class="status-badge status-${session.status}">${session.status}</span>
+                </div>
+                <div class="history-details">
+                    <span>${session.fields?.filled || 0}/${session.fields?.total || 0} fields filled</span>
+                    <span>${formatTime(session.startTime)}</span>
+                </div>
+                ${session.fields?.failed > 0 ? `<p class="error-text">${session.fields.failed} failed</p>` : ''}
+            </div>
+        `).join('');
+    }
+
+    // Retrieve active session from content script in active tab
+    function getActiveTabTrackingData(callback) {
+        chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+            let targetTab = tabs && tabs[0];
+
+            // If the active tab is settings page itself, look for other tabs
+            if (targetTab && targetTab.url && targetTab.url.includes(chrome.runtime.id)) {
+                chrome.tabs.query({ active: true }, (allActiveTabs) => {
+                    const nonSettingsTab = allActiveTabs.find(t => t.url && !t.url.includes(chrome.runtime.id));
+                    if (nonSettingsTab) {
+                        sendMessageToTab(nonSettingsTab.id);
+                    } else {
+                        // Fallback: search all tabs for any ATS url
+                        chrome.tabs.query({}, (allTabs) => {
+                            const atsTab = allTabs.find(t => t.url && isATSSite(t.url));
+                            if (atsTab) {
+                                sendMessageToTab(atsTab.id);
+                            } else {
+                                callback(null);
+                            }
+                        });
+                    }
+                });
+            } else if (targetTab) {
+                sendMessageToTab(targetTab.id);
+            } else {
+                callback(null);
+            }
+
+            function sendMessageToTab(tabId) {
+                chrome.tabs.sendMessage(tabId, { action: 'get_tracking_data' }, (response) => {
+                    if (chrome.runtime.lastError || !response) {
+                        callback(null);
+                    } else {
+                        callback(response);
+                    }
+                });
+            }
+        });
+    }
+
+    // Initialize current session card if there is an active session
+    function initCurrentSession() {
+        getActiveTabTrackingData((response) => {
+            if (response && response.currentSession) {
+                updateCurrentSessionCard(response.currentSession);
+            } else {
+                if (currentSessionCard) currentSessionCard.classList.add('hidden');
+            }
+        });
+    }
+
+    // Update current session card DOM
+    function updateCurrentSessionCard(session) {
+        if (!currentSessionCard) return;
+
+        currentSessionCard.classList.remove('hidden');
+        if (trackingAts) trackingAts.textContent = session.atsType || 'unknown';
+        if (trackingCompany) trackingCompany.textContent = session.company || 'N/A';
+        if (trackingStartTime) trackingStartTime.textContent = formatTime(session.startTime);
+
+        if (trackingCompletion) {
+            const filled = session.fields?.filled || 0;
+            const total = session.fields?.total || 0;
+            const percentage = total > 0 ? Math.round((filled / total) * 100) : 0;
+            trackingCompletion.textContent = `${percentage}% (${filled}/${total} fields)`;
+        }
+    }
+
+    // Clear tracking history listener
+    if (clearTrackingHistoryBtn) {
+        clearTrackingHistoryBtn.addEventListener('click', () => {
+            if (confirm('Clear all tracking history?')) {
+                chrome.storage.local.set({ formTrackerHistory: [] }, () => {
+                    if (chrome.runtime.lastError) {
+                        showToast('Failed to clear tracking history', 'error');
+                        return;
+                    }
+                    loadTrackingHistory();
+                    showToast('Tracking history cleared', 'success');
+                });
+            }
+        });
+    }
+
+    // Export tracking data listener
+    if (exportTrackingBtn) {
+        exportTrackingBtn.addEventListener('click', () => {
+            getActiveTabTrackingData((response) => {
+                if (response) {
+                    // Export the current session data combined with full history
+                    chrome.storage.local.get(['formTrackerHistory'], (result) => {
+                        const exportData = {
+                            currentSession: response.currentSession,
+                            fieldStates: response.fieldStates || [],
+                            failures: response.failures || [],
+                            needsReview: response.needsReview || [],
+                            history: result.formTrackerHistory || []
+                        };
+                        downloadJson(exportData, `tracking-data-${Date.now()}.json`);
+                    });
+                } else {
+                    // No active session found, export history from storage
+                    chrome.storage.local.get(['formTrackerHistory'], (result) => {
+                        const exportData = {
+                            history: result.formTrackerHistory || []
+                        };
+                        downloadJson(exportData, `tracking-history-${Date.now()}.json`);
+                    });
+                }
+            });
+        });
+    }
+
+    function downloadJson(data, filename) {
+        const dataStr = JSON.stringify(data, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('Tracking data exported successfully', 'success');
+    }
+
+    // Listen for runtime messages from the active tab's form tracker
+    chrome.runtime.onMessage.addListener((msg) => {
+        try {
+            if (msg.action === 'session_started') {
+                updateCurrentSessionCard(msg.session);
+            } else if (msg.action === 'session_ended') {
+                if (currentSessionCard) currentSessionCard.classList.add('hidden');
+                loadTrackingHistory();
+            } else if (msg.action === 'update_progress') {
+                getActiveTabTrackingData((response) => {
+                    if (response && response.currentSession) {
+                        updateCurrentSessionCard(response.currentSession);
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('[Settings] Message error:', error);
+        }
+    });
+
+    // Listen for storage changes to formTrackerHistory
+    chrome.storage.onChanged.addListener((changes, namespace) => {
+        try {
+            if (namespace === 'local' && changes.formTrackerHistory) {
+                const history = (changes.formTrackerHistory.newValue || []).slice(-10).reverse();
+                renderTrackingHistory(history);
+            }
+        } catch (error) {
+            console.error('[Settings] Storage change error:', error);
+        }
+    });
 
     // === PREFERENCES SECTION ===
 
