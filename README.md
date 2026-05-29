@@ -49,8 +49,8 @@ TalentScreen supports 26+ major Applicant Tracking Systems:
 ### From Source (Development)
 ```bash
 # Clone repository
-git clone https://github.com/your-org/talentscreen-autofill-extension.git
-cd talentscreen-autofill-extension
+git clone https://github.com/WhiteboxHub/project-talentscreen-autofill-extension.git
+cd project-talentscreen-autofill-extension
 
 # Load in Chrome
 1. Open chrome://extensions/
@@ -387,22 +387,23 @@ MIT License - see LICENSE file for details
 
 ---
 
-## 🔐 Privacy
+## 🔐 Privacy & Web Store Disclosure
 
-This extension:
-- ✅ Stores all data **locally** in Chrome storage
-- ✅ **Never sends** data to external servers
+This extension takes your privacy seriously:
+- ✅ Stores all data **locally** on your device using Chrome storage
+- ✅ **Never transmits** or uploads your resume data to external servers
+- ✅ **No tracking** pixels, analytics tools, or third-party SDKs
 - ✅ **Open source** - audit the code yourself
-- ✅ Requests permissions only for supported job boards
+- ✅ Requests minimum necessary permissions for supported job boards
 
-Read our full [Privacy Policy](PRIVACY_POLICY.md)
+Read our full [Privacy Policy](privacy-policy.html)
 
 ---
 
 ## 📞 Support
 
-- 🐛 **Bug Reports:** [GitHub Issues](https://github.com/your-org/talentscreen-autofill-extension/issues)
-- 💬 **Discussions:** [GitHub Discussions](https://github.com/your-org/talentscreen-autofill-extension/discussions)
+- 🐛 **Bug Reports:** [GitHub Issues](https://github.com/WhiteboxHub/project-talentscreen-autofill-extension/issues)
+- 💬 **Discussions:** [GitHub Discussions](https://github.com/WhiteboxHub/project-talentscreen-autofill-extension/discussions)
 - 📧 **Email:** support@whiteboxlearning.com
 
 ---

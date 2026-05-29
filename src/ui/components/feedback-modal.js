@@ -234,7 +234,6 @@ const FeedbackModal = {
         fieldsFilled: this.sessionData.requiredFieldsFilled,
         completion: Math.round((this.sessionData.requiredFieldsFilled / this.sessionData.requiredFieldsFound) * 100)
       } : null,
-      userAgent: navigator.userAgent,
       extensionVersion: chrome.runtime.getManifest?.()?.version || 'unknown'
     };
 
@@ -284,25 +283,13 @@ const FeedbackModal = {
       // Format email body
       const emailBody = this._formatEmailBody(feedback);
 
-      // Use Web3Forms API for seamless email submission
-      const formData = new FormData();
-      formData.append('access_key', 'YOUR_WEB3FORMS_KEY'); // You'll need to get this from web3forms.com (free)
-      formData.append('subject', `TalentScreen Feedback - Rating: ${feedback.rating}/5`);
-      formData.append('from_name', 'TalentScreen Extension');
-      formData.append('email', 'sampath.velupula@gmail.com,recruiting@whitebox-learning.com');
-      formData.append('message', emailBody);
-
-      // Send via Web3Forms (or similar service)
-      // For now, we'll use a simple mailto fallback
-      // You can integrate with Web3Forms, FormSpree, or EmailJS later
-
       console.log('[Feedback] Email data prepared:', {
         to: ['sampath.velupula@gmail.com', 'recruiting@whitebox-learning.com'],
         subject: `TalentScreen Feedback - Rating: ${feedback.rating}/5`,
         body: emailBody
       });
 
-      // Fallback: Send to background script to handle email
+      // Send to background script to handle email via mailto
       if (chrome.runtime) {
         chrome.runtime.sendMessage({
           action: 'send_feedback_email',
@@ -353,7 +340,6 @@ const FeedbackModal = {
 
     lines.push('Technical Details:');
     lines.push(`  Extension Version: ${feedback.extensionVersion}`);
-    lines.push(`  User Agent: ${feedback.userAgent}`);
     lines.push(`  Feedback ID: ${feedback.id}`);
 
     return lines.join('\n');
