@@ -6,6 +6,9 @@ class GenericStrategy {
     constructor() {
         this.CONFIDENCE_THRESHOLD = 70;
         this._hasUploadedResume = false;
+        this._lastProgressionUrl = null;
+        this._progressionAttempts = 0;
+        this.MAX_PROGRESSION_ATTEMPTS = 3; // Prevent infinite progression loops
 
         // Field Mapping Dictionary
         this.FIELD_MAPPING = {
@@ -360,44 +363,90 @@ class GenericStrategy {
 
         handleAddButtons();
 
-        const inputs = document.querySelectorAll('input, textarea, select');
+        const selectors = [
+            'input', 
+            'textarea', 
+            'select',
+            '[contenteditable="true"]',
+            '[role="textbox"]',
+            '[role="combobox"]'
+        ];
+        const inputs = document.querySelectorAll(selectors.join(', '));
         let fillCount = 0;
         let totalInteractable = 0;
         let educationGroupTracker = new Map();
         let employmentGroupTracker = new Map();
 
         for (const input of inputs) {
-            // Allow hidden fields if they have a name or id (likely state holders for custom dropdowns)
-            if (input.type === 'hidden' && !input.id && !input.name && !input.getAttribute('data-automation-id')) continue;
-            if (input.disabled || input.readOnly) continue;
-            
             // Skip Select2-hidden selects
             if (
                 input.tagName === 'SELECT' &&
                 (input.classList.contains('select2-hidden-accessible') ||
-                    input.getAttribute('aria-hidden') === 'true' && input.style.display === 'none')
+                    (input.getAttribute('aria-hidden') === 'true' && input.style.display === 'none'))
             ) continue;
 
-            totalInteractable++;
+            // Determine if it's a valid UI field to track
+            let label = '';
+            if (window.TrackingIntegration && window.TrackingIntegration.extractLabel) {
+                label = window.TrackingIntegration.extractLabel(input);
+            } else {
+                label = this.getLabelText(input);
+            }
+            
+            // Valid UI field if it's physically visible, a file input, or a hidden React state input with a real label
+            const isVisible = input.offsetWidth > 0 || input.offsetHeight > 0 || input.type === 'file';
+            const hasValidLabel = label && label.toLowerCase() !== 'unknown' && label.length < 100;
+            const isValidHidden = (!isVisible || input.type === 'hidden') && hasValidLabel;
+            const isValidUIField = isVisible || isValidHidden;
 
-            // Register field with tracking system
-            if (typeof TrackingIntegration !== 'undefined' && window.TrackingIntegration && window.TrackingIntegration.initialized) {
-                try {
-                    const label = this.getLabelText(input) || input.name || input.id || 'unknown';
-                    window.TrackingIntegration.trackField(input, label, input.type);
-                } catch (e) { /* tracking should never break autofill */ }
+            // Register valid UI fields with the tracker immediately so the UI sees them
+            if (isValidUIField && window.TrackingIntegration && window.TrackingIntegration.initialized) {
+                window.TrackingIntegration.trackField(input);
             }
 
-            // Skip fields the user has manually edited
-            if (input.dataset.afUserLocked === 'true') continue;
+            // Skip fields the user has manually edited, but ensure they display as completed in UI!
+            if (input.dataset.afUserLocked === 'true') {
+                if (isValidUIField && window.TrackingIntegration && window.TrackingIntegration.initialized) {
+                    window.TrackingIntegration.trackFilled(input, input.value || 'User Edited', 'User manually edited');
+                }
+                continue;
+            }
+
+            // Record and skip disabled/readOnly fields AFTER tracking them
+            if (input.disabled || input.readOnly) {
+                if (input.value && input.value.trim() !== '') {
+                    fillCount++;
+                    input.dataset.afStatus = 'filled';
+                    if (isValidUIField && window.TrackingIntegration && window.TrackingIntegration.initialized) {
+                        window.TrackingIntegration.trackFilled(input, input.value, 'prefilled/locked');
+                    }
+                } else {
+                    if (isValidUIField && window.TrackingIntegration && window.TrackingIntegration.initialized) {
+                        window.TrackingIntegration.trackSkipped(input, 'Field is locked');
+                    }
+                }
+                continue;
+            }
+
+            totalInteractable++;
 
             // Handle Radio/Checkbox
             if (input.type === 'radio' || input.type === 'checkbox') {
                 this.handleRadioCheckbox(input, normalizedData);
                 if (input.checked) {
                     fillCount++;
-                    if (typeof TrackingIntegration !== 'undefined' && window.TrackingIntegration && window.TrackingIntegration.initialized) {
-                        try { window.TrackingIntegration.trackFilled(input, String(input.value || input.checked), 'radio_checkbox'); } catch (e) { /* silent */ }
+                    input.dataset.afStatus = 'filled';
+                    if (isValidUIField && window.TrackingIntegration && window.TrackingIntegration.initialized) {
+                        window.TrackingIntegration.trackFilled(input, 'checked', 'radio/checkbox');
+                    }
+                } else {
+                    // Ensure required checkboxes/radios get marked as failed/skipped if left unchecked
+                    if (isValidUIField && window.TrackingIntegration && window.TrackingIntegration.initialized) {
+                        if (input.required || input.getAttribute('aria-required') === 'true') {
+                            window.TrackingIntegration.trackFailed(input, 'Required selection not made');
+                        } else {
+                            window.TrackingIntegration.trackSkipped(input, 'Optional selection not made');
+                        }
                     }
                 }
                 continue;
@@ -406,8 +455,9 @@ class GenericStrategy {
             // Skip inputs that are already filled (unless forced)
             if (input.value && input.value.trim() !== '') {
                 fillCount++;
-                if (typeof TrackingIntegration !== 'undefined' && window.TrackingIntegration && window.TrackingIntegration.initialized) {
-                    try { window.TrackingIntegration.trackFilled(input, input.value, 'pre_filled'); } catch (e) { /* silent */ }
+                input.dataset.afStatus = 'filled';
+                if (isValidUIField && window.TrackingIntegration && window.TrackingIntegration.initialized) {
+                    window.TrackingIntegration.trackFilled(input, input.value, 'prefilled');
                 }
                 continue;
             }
@@ -490,27 +540,25 @@ class GenericStrategy {
                     if (match.confidence >= this.CONFIDENCE_THRESHOLD) {
                         this.setInputValue(input, match.value, 'green');
                         fillCount++;
-                        // Track successful fill
-                        if (typeof TrackingIntegration !== 'undefined' && window.TrackingIntegration && window.TrackingIntegration.initialized) {
-                            try { window.TrackingIntegration.trackFilled(input, match.value, match.fieldKey || 'heuristic'); } catch (e) { /* silent */ }
+                        input.dataset.afStatus = 'filled';
+                        
+                        if (isValidUIField && window.TrackingIntegration && window.TrackingIntegration.initialized) {
+                            window.TrackingIntegration.trackFilled(input, match.value, match.fieldKey);
                         }
                     } else {
-                        // Low confidence — mark for review
-                        if (typeof TrackingIntegration !== 'undefined' && window.TrackingIntegration && window.TrackingIntegration.initialized) {
-                            try { window.TrackingIntegration.trackNeedsReview(input, 'low_confidence'); } catch (e) { /* silent */ }
+                        if (isValidUIField && window.TrackingIntegration && window.TrackingIntegration.initialized) {
+                            window.TrackingIntegration.trackFailed(input, 'Low confidence match');
                         }
                     }
                 } else {
                     if (input.required || input.getAttribute('aria-required') === 'true') {
                         this.highlightUnmatchedRequired(input);
-                        // Track required field with no data as needs_review
-                        if (typeof TrackingIntegration !== 'undefined' && window.TrackingIntegration && window.TrackingIntegration.initialized) {
-                            try { window.TrackingIntegration.trackNeedsReview(input, 'no_data_required'); } catch (e) { /* silent */ }
+                        if (isValidUIField && window.TrackingIntegration && window.TrackingIntegration.initialized) {
+                            window.TrackingIntegration.trackFailed(input, 'No data found for required field');
                         }
                     } else {
-                        // Track optional field with no data as skipped
-                        if (typeof TrackingIntegration !== 'undefined' && window.TrackingIntegration && window.TrackingIntegration.initialized) {
-                            try { window.TrackingIntegration.trackSkipped(input, 'no_data'); } catch (e) { /* silent */ }
+                        if (isValidUIField && window.TrackingIntegration && window.TrackingIntegration.initialized) {
+                            window.TrackingIntegration.trackSkipped(input, 'No data found for optional field');
                         }
                     }
                 }
@@ -526,7 +574,109 @@ class GenericStrategy {
             chrome.runtime.sendMessage({ action: 'update_progress', filled: fillCount, total: totalInteractable });
         }
 
+        // Try to auto-proceed to next step if all required fields are filled
+        await this.attemptMultiStepProgression();
+
         return { filled: fillCount, total: totalInteractable };
+    }
+
+    /**
+     * Generic multi-step form progression handler
+     * Attempts to find and click "Next", "Continue", or similar buttons
+     */
+    async attemptMultiStepProgression() {
+        // Prevent infinite loops - track URL changes and attempt count
+        const currentUrl = window.location.href;
+        if (this._lastProgressionUrl === currentUrl && this._progressionAttempts >= this.MAX_PROGRESSION_ATTEMPTS) {
+            return;
+        }
+
+        if (this._lastProgressionUrl !== currentUrl) {
+            this._lastProgressionUrl = currentUrl;
+            this._progressionAttempts = 0;
+        }
+
+        this._progressionAttempts++;
+
+        // Check if current form has unfilled required fields
+        const requiredFields = Array.from(document.querySelectorAll('[required], [aria-required="true"]'));
+        const unfilledRequired = requiredFields.filter(field => {
+            if (field.offsetParent === null) return false; // Skip hidden fields
+            if (field.type === 'hidden') return false;
+            if (field.type === 'checkbox' || field.type === 'radio') {
+                return !field.checked;
+            }
+            return !field.value || field.value.trim() === '';
+        });
+
+        if (unfilledRequired.length > 0) {
+            return; // Don't proceed if required fields are unfilled
+        }
+
+        // Look for navigation buttons
+        const nextButton = this.findProgessionButton();
+        if (nextButton) {
+            try {
+                nextButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                await this.sleep(300);
+                nextButton.click();
+            } catch (e) {
+                console.log('[GenericStrategy] Error clicking progression button:', e.message);
+            }
+        }
+    }
+
+    /**
+     * Find "Next", "Continue", "Submit", or similar progression buttons
+     */
+    findProgessionButton() {
+        const selectors = [
+            'button:not([style*="display: none"])',
+            '[role="button"]',
+            'a[role="button"]'
+        ];
+
+        const buttons = Array.from(document.querySelectorAll(selectors.join(', ')))
+            .filter(b => {
+                const isVisible = b.offsetParent !== null;
+                const isEnabled = !b.disabled;
+                return isVisible && isEnabled;
+            })
+            .sort((a, b) => {
+                // Prioritize buttons with higher z-index
+                const getZIndex = (el) => parseInt(window.getComputedStyle(el).zIndex || 0, 10);
+                return getZIndex(b) - getZIndex(a);
+            });
+
+        // Look for buttons with progression-related text
+        const progressionPatterns = [
+            'next', 'continue', 'next step', 'proceed', 'forward',
+            'submit', 'apply', 'send application'
+        ];
+
+        const progressButton = buttons.find(b => {
+            const text = (b.innerText || b.textContent || b.getAttribute('aria-label') || '').toLowerCase().trim();
+            const className = (b.className || '').toLowerCase();
+            const dataAttrs = [
+                b.getAttribute('data-automation-id'),
+                b.getAttribute('data-qa'),
+                b.getAttribute('name'),
+                b.getAttribute('data-testid')
+            ].join(' ').toLowerCase();
+
+            // Skip cancel/back/previous buttons
+            if (text.includes('cancel') || text.includes('back') || text.includes('previous') || 
+                text.includes('close') || text.includes('decline')) {
+                return false;
+            }
+
+            // Check for progression keywords
+            return progressionPatterns.some(pattern => 
+                text.includes(pattern) || className.includes(pattern) || dataAttrs.includes(pattern)
+            );
+        });
+
+        return progressButton || null;
     }
 
     findCustomAnswer(input, hostname, customAtsAnswers) {
@@ -738,9 +888,20 @@ class GenericStrategy {
             const confidence = this.calculateConfidence(features, keywords, fieldKey);
 
             if (confidence > bestMatch.confidence) {
-                const value = this.getNestedValue(normalizedData, fieldKey);
+                let value = this.getNestedValue(normalizedData, fieldKey);
+                
+                // Fallbacks for location
+                if (!value && fieldKey.startsWith('contact.')) {
+                    value = this.getNestedValue(normalizedData, fieldKey.replace('contact.', 'location.'));
+                }
+                if (!value && fieldKey === 'contact.location') {
+                    const city = this.getNestedValue(normalizedData, 'contact.city') || this.getNestedValue(normalizedData, 'location.city') || '';
+                    const state = this.getNestedValue(normalizedData, 'contact.state') || this.getNestedValue(normalizedData, 'location.region') || '';
+                    if (city && state) value = `${city}, ${state}`;
+                    else if (city) value = city;
+                }
 
-                if (value !== undefined && value !== null) {
+                if (value !== undefined && value !== null && value !== '') {
                     bestMatch = { value, confidence, fieldKey };
                     //  = "${String(value).substring(0, 40)}..."`);
                 }
@@ -810,11 +971,13 @@ class GenericStrategy {
             if (isPositiveMatch) {
                 input.checked = true;
                 this.setInputValue(input, null, 'green'); // Visual feedback
+                input.dataset.afStatus = 'filled';
             }
         } else if (input.type === 'checkbox') {
             if (val === 'yes' || val === 'true' || val === '1') {
                 input.checked = true;
                 this.setInputValue(input, null, 'green');
+                input.dataset.afStatus = 'filled';
             }
         }
     }
@@ -854,6 +1017,8 @@ class GenericStrategy {
     setInputValue(input, value, highlightType = 'green') {
         if (!input || (!value && highlightType !== 'red')) return;
 
+        input.dataset.afStatus = 'filled';
+
         if (value) {
             if (input.tagName === 'SELECT') {
                 this.setSelectValue(input, value);
@@ -878,7 +1043,7 @@ class GenericStrategy {
             }
 
             // Dispatch events to satisfy modern frameworks
-            ['input', 'change', 'blur'].forEach(eventType => {
+            ['focus', 'input', 'change', 'blur'].forEach(eventType => {
                 input.dispatchEvent(new Event(eventType, { bubbles: true, composed: true }));
             });
         }
@@ -908,6 +1073,8 @@ class GenericStrategy {
      */
     setSelectValue(select, value) {
         if (!select || !value) return;
+
+        select.dataset.afStatus = 'filled';
 
         const normalize = (s) => String(s).toLowerCase().replace(/[^\w\s]/g, '').trim();
         let val = normalize(value);
@@ -1001,4 +1168,3 @@ class GenericStrategy {
 if (typeof window !== 'undefined') {
     window.GenericStrategy = GenericStrategy;
 }
-

@@ -67,10 +67,22 @@
             if (!this.initialized || !window.FormTracker) return;
 
             const fieldId = this.generateFieldId(element);
+            
+            // Accurately parse the label and type
+            const extractedLabel = label || this.extractLabel(element);
+            const fieldType = type || element.type || element.tagName.toLowerCase();
+            
+            // Check standard attributes, label asterisks, and resume fields for required status
+            const isRequired = element.required || 
+                               element.hasAttribute('required') || 
+                               element.getAttribute('aria-required') === 'true' ||
+                               extractedLabel.includes('*') ||
+                               (fieldType === 'file' && extractedLabel.toLowerCase().includes('resume'));
+                               
             const fieldData = {
-                label: label || this.extractLabel(element),
-                type: type || element.type || 'text',
-                required: element.required || element.hasAttribute('required'),
+                label: extractedLabel,
+                type: fieldType,
+                required: isRequired,
                 selector: this.getSelector(element),
                 confidence: options.confidence || 1.0,
                 name: element.name,
@@ -204,45 +216,86 @@
          * Generate consistent field ID
          */
         generateFieldId(element) {
+            // Prevent collisions by stamping the element once
+            if (element.dataset.afTrackingId) return element.dataset.afTrackingId;
+
+            let id = '';
             if (element.id) return `id:${element.id}`;
             if (element.name) return `name:${element.name}`;
 
             const label = this.extractLabel(element);
-            if (label) return `label:${label.toLowerCase().replace(/\s+/g, '-')}`;
-
-            return `xpath:${this.getXPath(element)}`;
+            if (label && label !== 'unknown') id = `label:${label.toLowerCase().replace(/\s+/g, '-')}`;
+            else id = `xpath:${this.getXPath(element)}`;
+            
+            // Add unique suffix if it's too generic to prevent overwriting
+            id = `${id}-${Math.random().toString(36).substr(2, 5)}`;
+            element.dataset.afTrackingId = id;
+            
+            return id;
         },
 
         /**
          * Extract label for field
          */
         extractLabel(element) {
-            // Try associated label
-            if (element.id) {
-                const label = document.querySelector(`label[for="${element.id}"]`);
-                if (label) return label.textContent.trim();
+            let label = '';
+            
+            // Try parent label first
+            if (element.parentElement && element.parentElement.tagName === 'LABEL') {
+                label = element.parentElement.innerText;
+            } else if (element.id) {
+                const labelEl = document.querySelector(`label[for="${element.id}"]`);
+                if (labelEl) label = labelEl.innerText;
             }
 
-            // Try parent label
-            const parentLabel = element.closest('label');
-            if (parentLabel) return parentLabel.textContent.trim();
+            // Try closest wrapper for floating labels (React/Material-UI)
+            if (!label) {
+                // Use strict selectors to avoid matching the entire form container!
+                const wrapper = element.closest('.MuiFormControl-root, .form-group, .field, [class^="field-"], [class^="form-group"]');
+                if (wrapper) {
+                    const inputsInWrapper = wrapper.querySelectorAll('input:not([type="hidden"]), select, textarea');
+                    if (inputsInWrapper.length <= 1) {
+                        const wrapperLabel = wrapper.querySelector('label') || wrapper.querySelector('[class*="label"]');
+                        if (wrapperLabel) label = wrapperLabel.innerText;
+                    }
+                }
+                
+                // Extra fallback for strict React hierarchies
+                if (!label && element.parentElement) {
+                    let pLabel = element.parentElement.querySelector('label');
+                    if (!pLabel && element.parentElement.parentElement) {
+                        const inputsInParent = element.parentElement.parentElement.querySelectorAll('input:not([type="hidden"]), select, textarea');
+                        if (inputsInParent.length <= 1) {
+                            pLabel = element.parentElement.parentElement.querySelector('label');
+                        }
+                    }
+                    if (pLabel) label = pLabel.innerText;
+                }
+            }
+
+            // Try aria-labelledby
+            if (!label && element.getAttribute('aria-labelledby')) {
+                const labelElement = document.getElementById(element.getAttribute('aria-labelledby'));
+                if (labelElement) label = labelElement.innerText;
+            }
 
             // Try aria-label
-            if (element.getAttribute('aria-label')) {
-                return element.getAttribute('aria-label').trim();
-            }
+            if (!label && element.getAttribute('aria-label')) label = element.getAttribute('aria-label');
 
             // Try placeholder
-            if (element.placeholder) {
-                return element.placeholder.trim();
-            }
+            if (!label && element.placeholder) label = element.placeholder;
 
             // Try data attributes
-            const dataLabel = element.getAttribute('data-label') || element.getAttribute('data-field-name');
-            if (dataLabel) return dataLabel.trim();
+            if (!label && element.getAttribute('data-label')) label = element.getAttribute('data-label');
+            if (!label && element.getAttribute('data-automation-id')) label = element.getAttribute('data-automation-id');
+            
+            // Check for file inputs explicitly
+            if (!label && element.type === 'file') label = 'Resume / File Upload';
 
             // Try name or id
-            return element.name || element.id || 'unknown';
+            if (!label) label = element.name || element.id || 'unknown';
+            
+            return label.split('\n')[0].trim(); // Split multi-line labels so they look clean in UI
         },
 
         /**
