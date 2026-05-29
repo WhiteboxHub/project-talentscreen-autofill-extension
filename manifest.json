@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TalentScreen - Whitebox Learning Autofill",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Intelligently autofills job applications across 26+ ATS platforms using your JSON resume data. Save time, apply faster.",
   "author": "Whitebox Learning - Sampath Velupula",
   "homepage_url": "https://chromewebstore.google.com/detail/talentscreen-autofill/bebdlhhpgmegdebdballinfmfnlpmeio",
@@ -31,6 +31,7 @@
     "*://*.taleo.net/*",
     "*://*.successfactors.com/*",
     "*://*.successfactors.eu/*",
+    "*://*.sapsf.com/*",
     "*://*.personio.com/*",
     "*://*.personio.de/*",
     "*://*.recruitee.com/*",
@@ -46,6 +47,7 @@
     "*://workforcenow.adp.com/*",
     "*://jobs.jobvite.com/*",
     "*://*.rippling-ats.com/*",
+    "*://*.kforce.com/*"
     "*://ats.rippling.com/*"
     "*://*.silkroad.com/*"
   ],
@@ -76,6 +78,7 @@
         "*://*.taleo.net/*",
         "*://*.successfactors.com/*",
         "*://*.successfactors.eu/*",
+        "*://*.sapsf.com/*",
         "*://*.personio.com/*",
         "*://*.personio.de/*",
         "*://*.recruitee.com/*",
@@ -91,6 +94,7 @@
         "*://workforcenow.adp.com/*",
         "*://jobs.jobvite.com/*",
         "*://*.rippling-ats.com/*",
+        "*://*.kforce.com/*"
         "*://ats.rippling.com/*"
         "*://*.silkroad.com/*"
       ],
@@ -119,6 +123,7 @@
         "src/content/atsStrategies/jobviteStrategy.js",
         "src/content/atsStrategies/leverStrategy.js",
         "src/content/atsStrategies/linkedinStrategy.js",
+        "src/content/atsStrategies/kforceStrategy.js",
         "src/content/atsStrategies/oraclecloudStrategy.js",
         "src/content/atsStrategies/isolvedhireStrategy.js",
         "src/content/atsStrategies/paychexStrategy.js",

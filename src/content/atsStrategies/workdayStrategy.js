@@ -51,7 +51,7 @@ class WorkdayStrategy extends GenericStrategy {
      */
     _handleWorkdayPseudoSelects(normalizedData) {
         const triggers = document.querySelectorAll('[data-automation-id*="selectWidget"], [data-automation-id*="promptIcon"], [role="combobox"]');
-        
+
         triggers.forEach(trigger => {
             const container = trigger.closest('[data-automation-id*="formField"]');
             if (!container) return;

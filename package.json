@@ -10,8 +10,5 @@
     "build": "npm run lint && node build/package.js",
     "test": "echo 'Tests not yet implemented' && exit 0"
   },
-  "dependencies": {
-    "puppeteer": "^24.37.5"
-  },
   "devDependencies": {}
 }
