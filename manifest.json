@@ -46,6 +46,7 @@
     "*://workforcenow.adp.com/*",
     "*://jobs.jobvite.com/*",
     "*://*.rippling-ats.com/*",
+    "*://ats.rippling.com/*"
     "*://*.silkroad.com/*"
   ],
   "background": {
@@ -90,6 +91,7 @@
         "*://workforcenow.adp.com/*",
         "*://jobs.jobvite.com/*",
         "*://*.rippling-ats.com/*",
+        "*://ats.rippling.com/*"
         "*://*.silkroad.com/*"
       ],
       "js": [

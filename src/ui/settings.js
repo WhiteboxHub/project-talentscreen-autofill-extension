@@ -26,8 +26,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const addEducationBtn = document.getElementById('addEducationBtn');
     const deleteProfileBtn = document.getElementById('deleteProfileBtn');
     const clearHistoryBtn = document.getElementById('clearHistoryBtn');
-    const clearTrackingHistoryBtn = document.getElementById('clearTrackingHistoryBtn');
-    const exportTrackingBtn = document.getElementById('exportTrackingBtn');
     const resetPersonalBtn = document.getElementById('resetPersonalBtn');
     const savePreferencesBtn = document.getElementById('savePreferencesBtn');
     const resetPreferencesBtn = document.getElementById('resetPreferencesBtn');
@@ -66,8 +64,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             updateFileDisplays();
-            loadTrackingHistory();
-            loadCurrentTrackingSession();
 
             // Handle deep link (hash)
             const hash = window.location.hash.substring(1);
@@ -101,11 +97,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 section.classList.remove('active');
             }
         });
-
-        if (sectionId === 'tracking') {
-            loadTrackingHistory();
-            loadCurrentTrackingSession();
-        }
     }
 
     // Close button
@@ -404,13 +395,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const screening = logistics.screening_answers || {};
 
         // EEO
-        const genderVal = (eeo.gender || currentResumeData.basics?.gender || '').toLowerCase();
-        const genderSelect = document.getElementById('gender');
-        if (['male', 'female', 'non-binary', 'decline'].includes(genderVal)) {
-            genderSelect.value = genderVal;
-        } else {
-            genderSelect.value = '';
-        }
+        document.getElementById('gender').value = eeo.gender || 'male';
         document.getElementById('ethnicity').value = eeo.ethnicity || 'asian';
         document.getElementById('veteranStatus').value = eeo.veteran_status || 'no';
         document.getElementById('disabilityStatus').value = eeo.disability_status || 'no';
@@ -435,8 +420,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Application Logistics
         document.getElementById('willingRelocate').value = logistics.willing_to_relocate || 'yes';
         document.getElementById('willingTravel').value = logistics.willing_to_travel || 'yes';
-        document.getElementById('whyInterested').value = screening.why_interested || '';
-        document.getElementById('whyGoodFit').value = screening.why_good_fit || '';
+        document.getElementById('whyInterested').value = screening.why_interested || 'Driven by the challenge of architecting production-grade agentic workflows and scaling LLM infrastructure within enterprise environments.';
+        document.getElementById('whyGoodFit').value = screening.why_good_fit || 'Proven experience leading AI architecture at Lucid Motors and Yahoo, focusing on end-to-end MLOps and highly available distributed systems.';
     }
 
     if (customForm) {
@@ -633,88 +618,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // === TRACKING SECTION ===
 
-    function loadCurrentTrackingSession() {
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            const activeTab = tabs?.[0];
-            if (!activeTab?.id) return;
-
-            chrome.tabs.sendMessage(activeTab.id, { action: 'get_tracking_data' }, (response) => {
-                if (chrome.runtime.lastError || !response?.currentSession) {
-                    renderCurrentTrackingSession(null);
-                    return;
-                }
-
-                renderCurrentTrackingSession(response.currentSession);
-            });
-        });
-    }
-
-    function renderCurrentTrackingSession(session) {
-        const currentSessionCard = document.getElementById('currentSessionCard');
-        if (!currentSessionCard) return;
-
-        if (!session) {
-            currentSessionCard.classList.add('hidden');
-            return;
-        }
-
-        currentSessionCard.classList.remove('hidden');
-
-        const total = session.fields?.total || 0;
-        const filled = session.fields?.filled || 0;
-        const completion = session.completionPercentage ?? (total > 0 ? Math.round((filled / total) * 100) : 0);
-
-        setText('trackingAts', session.atsType || 'unknown');
-        setText('trackingCompany', session.company || 'N/A');
-        setText('trackingStartTime', formatTrackingTime(session.startTime));
-        setText('trackingCompletion', `${completion}%`);
-    }
-
-    function loadTrackingHistory() {
-        chrome.storage.local.get(['formTrackerHistory'], (result) => {
-            if (chrome.runtime.lastError) {
-                showToast('Failed to load tracking history', 'error');
-                return;
-            }
-
-            const history = (result.formTrackerHistory || []).slice(-10).reverse();
-            renderTrackingHistory(history);
-        });
-    }
-
-    function renderTrackingHistory(history) {
-        const trackingHistoryList = document.getElementById('trackingHistoryList');
-        if (!trackingHistoryList) return;
-
-        if (history.length === 0) {
-            trackingHistoryList.innerHTML = '<p class="empty-state">No tracking history yet</p>';
-            return;
-        }
-
-        trackingHistoryList.innerHTML = history.map(session => {
-            const total = session.fields?.total || 0;
-            const filled = session.fields?.filled || 0;
-            const completion = session.completionPercentage ?? (total > 0 ? Math.round((filled / total) * 100) : 0);
-            const failed = session.fields?.failed || 0;
-            const needsReview = session.fields?.needs_review || 0;
-
-            return `
-                <div class="tracking-history-item">
-                    <div class="history-main">
-                        <strong>${escapeHtml(session.company || session.atsType || 'Application')}</strong>
-                        <span class="status-badge status-${escapeHtml(session.status || 'completed')}">${escapeHtml(session.status || 'completed')}</span>
-                    </div>
-                    <div class="history-details">
-                        <span>${filled}/${total} fields filled</span>
-                        <span>${completion}% complete</span>
-                        <span>${formatTrackingTime(session.startTime)}</span>
-                    </div>
-                    ${(failed > 0 || needsReview > 0) ? `<p class="tracking-warning">${failed} failed, ${needsReview} need review</p>` : ''}
-                </div>
-            `;
-        }).join('');
-    }
-
     const debugModeToggle = document.getElementById('debugModeToggle');
     if (debugModeToggle) {
         chrome.storage.local.get(['formTrackerDebugMode'], (result) => {
@@ -726,93 +629,6 @@ document.addEventListener('DOMContentLoaded', () => {
             chrome.storage.local.set({ formTrackerDebugMode: enabled });
             showToast(`Debug mode ${enabled ? 'enabled' : 'disabled'}`, 'success');
         });
-    }
-
-    if (clearTrackingHistoryBtn) {
-        clearTrackingHistoryBtn.addEventListener('click', () => {
-            if (confirm('Clear all tracking history?')) {
-                chrome.storage.local.set({ formTrackerHistory: [] }, () => {
-                    if (chrome.runtime.lastError) {
-                        showToast('Failed to clear tracking history', 'error');
-                        return;
-                    }
-
-                    loadTrackingHistory();
-                    showToast('Tracking history cleared', 'success');
-                });
-            }
-        });
-    }
-
-    if (exportTrackingBtn) {
-        exportTrackingBtn.addEventListener('click', () => {
-            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                const activeTab = tabs?.[0];
-
-                if (activeTab?.id) {
-                    chrome.tabs.sendMessage(activeTab.id, { action: 'export_tracking_data' }, (response) => {
-                        if (!chrome.runtime.lastError && response) {
-                            downloadTrackingData(response);
-                            return;
-                        }
-
-                        exportStoredTrackingHistory();
-                    });
-                } else {
-                    exportStoredTrackingHistory();
-                }
-            });
-        });
-    }
-
-    function exportStoredTrackingHistory() {
-        chrome.storage.local.get(['formTrackerHistory'], (result) => {
-            if (chrome.runtime.lastError) {
-                showToast('Could not export tracking data', 'error');
-                return;
-            }
-
-            downloadTrackingData({
-                currentSession: null,
-                fieldStates: [],
-                failures: [],
-                needsReview: [],
-                history: result.formTrackerHistory || []
-            });
-        });
-    }
-
-    function downloadTrackingData(data) {
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-
-        link.href = url;
-        link.download = `tracking-data-${Date.now()}.json`;
-        link.click();
-        URL.revokeObjectURL(url);
-
-        showToast('Tracking data exported', 'success');
-    }
-
-    function setText(id, value) {
-        const element = document.getElementById(id);
-        if (element) element.textContent = value;
-    }
-
-    function formatTrackingTime(isoString) {
-        if (!isoString) return '-';
-
-        try {
-            return new Date(isoString).toLocaleString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-        } catch (error) {
-            return '-';
-        }
     }
 
     // === PREFERENCES SECTION ===
@@ -923,15 +739,6 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => {
             toast.classList.remove('show');
         }, type === 'error' ? 5000 : 3000);
-    }
-
-    function escapeHtml(value) {
-        return String(value ?? '')
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
     }
 
     // Initialize
