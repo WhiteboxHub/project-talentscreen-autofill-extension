@@ -12,9 +12,9 @@ class GenericStrategy {
 
         // Field Mapping Dictionary
         this.FIELD_MAPPING = {
-            "identity.first_name": ["first_name", "first name", "fname", "given name"],
+            "identity.first_name": ["first_name", "first name", "fname", "given name", "preferred first name", "preferred first_name", "preferred given name"],
             "identity.middle_name": ["middle_name", "middle name", "m.i.", "middle initial"],
-            "identity.last_name": ["last_name", "last name", "lname", "surname", "family name"],
+            "identity.last_name": ["last_name", "last name", "lname", "surname", "family name", "preferred last name", "preferred last_name", "preferred family name"],
             "identity.full_name": ["name", "fullname", "full_name", "applicant name"],
             "identity.pronouns": ["pronouns", "preferred pronouns", "gender pronouns"],
             "contact.email": ["email", "e-mail", "mail", "email address"],
@@ -109,6 +109,49 @@ class GenericStrategy {
         return [s, states[s], Object.keys(states).find(key => states[key].toLowerCase() === s)].filter(Boolean);
     }
 
+    isCandidateInUS(normalizedData) {
+        if (!normalizedData || !normalizedData.contact) return false;
+        const country = String(normalizedData.contact.country || "").toLowerCase().trim();
+        const state = String(normalizedData.contact.state || "").toLowerCase().trim();
+        const address = String(normalizedData.contact.address || "").toLowerCase().trim();
+        const location = String(normalizedData.contact.location || "").toLowerCase().trim();
+
+        const usTerms = ['us', 'usa', 'united states', 'united states of america', 'america'];
+        if (usTerms.includes(country)) return true;
+
+        const stateVariations = this.getStateVariations(state);
+        if (stateVariations.length > 1) return true;
+
+        const isUSText = term => {
+            const t = term.toLowerCase();
+            return t.includes('united states') || t.includes(' usa ') || t.endsWith(' usa') || t.includes(' u.s.a.') || t.includes(', ca') || t.includes(', ny') || t.includes(', tx') || t.includes('california') || t.includes('new york') || t.includes('texas');
+        };
+
+        if (isUSText(address) || isUSText(location) || isUSText(state)) return true;
+
+        return false;
+    }
+
+    isCandidateInCanada(normalizedData) {
+        if (!normalizedData || !normalizedData.contact) return false;
+        const country = String(normalizedData.contact.country || "").toLowerCase().trim();
+        const state = String(normalizedData.contact.state || "").toLowerCase().trim();
+        const address = String(normalizedData.contact.address || "").toLowerCase().trim();
+        const location = String(normalizedData.contact.location || "").toLowerCase().trim();
+
+        const caTerms = ['canada', 'canadian', 'on', 'ontario', 'bc', 'british columbia', 'qc', 'quebec'];
+        if (caTerms.includes(country)) return true;
+
+        const isCanadaText = term => {
+            const t = term.toLowerCase();
+            return t.includes('canada') || t.includes(', on') || t.includes(', bc') || t.includes(', qc') || t.includes('ontario') || t.includes('british columbia') || t.includes('toronto') || t.includes('vancouver') || t.includes('montreal');
+        };
+
+        if (isCanadaText(address) || isCanadaText(location) || isCanadaText(state)) return true;
+
+        return false;
+    }
+
     sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
@@ -121,7 +164,7 @@ class GenericStrategy {
     handleFileUpload(resumeFile) {
         if (!resumeFile || !resumeFile.data) return;
 
-        const sessionKey = `af_uploaded_${window.location.hostname}`;
+        const sessionKey = `af_uploaded_${window.location.hostname}${window.location.pathname}`;
         const fileIdentifier = `${resumeFile.name}_${resumeFile.size}`;
 
         // Only enforce sessionStorage guard for automatic/mutation-based runs.
@@ -141,14 +184,17 @@ class GenericStrategy {
             const parentContainerTxt = input.parentElement?.parentElement?.innerText?.toLowerCase() || "";
             const combinedTxt = labelTxt + " " + containerTxt + " " + parentContainerTxt + " " + (input.name || "").toLowerCase() + " " + (input.id || "").toLowerCase();
 
-            // Match resume keywords but EXCLUDE fields clearly marked for cover letters
+            // Match resume keywords
             const resumeKeywords = ["resume", "cv", "curriculum", "attach", "upload", "file", "document", "application"];
             const isResumeField = resumeKeywords.some(kw => combinedTxt.includes(kw));
-            const isCoverLetterField = combinedTxt.includes("cover");
+            
+            // Exclude fields clearly marked for cover letters (scope cover letter check to label, name, ID)
+            const isCoverLetterField = labelTxt.includes("cover") || 
+                                       (input.name || "").toLowerCase().includes("cover") || 
+                                       (input.id || "").toLowerCase().includes("cover") ||
+                                       (input.placeholder && input.placeholder.toLowerCase().includes("cover"));
 
             if (isResumeField && !isCoverLetterField) {
-
-
                 try {
                     // Convert base64 Data URL to Blob
                     const byteString = atob(resumeFile.data.split(',')[1]);
@@ -166,12 +212,21 @@ class GenericStrategy {
                     input.files = dataTransfer.files;
 
                     ['change', 'input', 'blur'].forEach(ev => {
-                        input.dispatchEvent(new Event(ev, { bubbles: true }));
+                        input.dispatchEvent(new Event(ev, { bubbles: true, composed: true }));
                     });
+
+                    // Trigger jQuery change event if jQuery is available on the page
+                    try {
+                        const $ = window.jQuery || window.$;
+                        if ($ && typeof $.fn !== 'undefined') {
+                            $(input).trigger('change');
+                        }
+                    } catch (e) { /* silent */ }
 
                     // Set both the DOM attribute and the sessionStorage flag
                     input.dataset.afUploaded = 'true';
                     sessionStorage.setItem(sessionKey, fileIdentifier);
+                    sessionStorage.setItem(`af_uploaded_${window.location.hostname}`, 'true'); // content.js compatibility
                     this._hasUploadedResume = true;
                     break;
                 } catch (e) {
@@ -473,7 +528,7 @@ class GenericStrategy {
                 const isEdu = match.fieldKey.startsWith('education_flat');
                 const isEmp = match.fieldKey.startsWith('employment.');
 
-                if (isEdu || isEmp) {
+                if ((isEdu || isEmp) && match.confidence >= this.CONFIDENCE_THRESHOLD) {
                     const sourceData = isEdu ? normalizedData.education : (normalizedData.employment?.history || []);
 
                     if (sourceData && sourceData.length > 0) {
@@ -538,7 +593,7 @@ class GenericStrategy {
 
                 if (match && match.value) {
                     if (match.confidence >= this.CONFIDENCE_THRESHOLD) {
-                        this.setInputValue(input, match.value, 'green');
+                        await this.setInputValue(input, match.value, 'green');
                         fillCount++;
                         input.dataset.afStatus = 'filled';
                         
@@ -739,6 +794,12 @@ class GenericStrategy {
         let matchedPrimaryFeature = false;
         const escapeRegExp = string => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+        const GENERIC_KEYWORDS = new Set([
+            "about", "role", "position", "company", "employer", "employers", 
+            "organization", "summary", "description", "source", "degree", 
+            "major", "school", "university", "college", "job"
+        ]);
+
         keywords.forEach(keyword => {
             const kw = keyword.toLowerCase();
             // Demands a strict word boundary. Fixes catastrophic bugs where searching for the "state" field internally matched the phrase "United States" in Veteran surveys.
@@ -747,7 +808,17 @@ class GenericStrategy {
             for (const [featureName, weight] of Object.entries(keywordWeights)) {
                 const featureValue = features[featureName];
                 if (featureValue && wordBoundaryRegex.test(featureValue)) {
-                    keywordScore += weight;
+                    let scoreToAdd = weight;
+
+                    // Apply generic keyword penalty for long sentence/question contexts
+                    if (GENERIC_KEYWORDS.has(kw) && featureValue.length > 20) {
+                        const words = featureValue.split(/\s+/).filter(Boolean);
+                        if (words.length > 3) {
+                            scoreToAdd = scoreToAdd * 0.1; // Penalize heavily (90% reduction)
+                        }
+                    }
+
+                    keywordScore += scoreToAdd;
                     matchedPrimaryFeature = true;
                     // Boost if it's the only thing in the attribute (ignoring asterisks)
                     if (featureValue === kw || featureValue.replace(/[*:\s]/g, '') === kw) {
@@ -901,6 +972,30 @@ class GenericStrategy {
                     else if (city) value = city;
                 }
 
+                // Check country-specific work authorization questions
+                if (fieldKey === 'identity.authorized_to_work') {
+                    const labelTextLower = features.label_text.toLowerCase();
+                    const isCanadaQuestion = labelTextLower.includes('canada') || labelTextLower.includes('canadian');
+                    const isUSQuestion = labelTextLower.includes('united states') || labelTextLower.includes(' u.s.') || labelTextLower.includes(' u.s.a.') || labelTextLower.includes('american') || /\bus\b/i.test(labelTextLower);
+                    
+                    const inUS = this.isCandidateInUS(normalizedData);
+                    const inCanada = this.isCandidateInCanada(normalizedData);
+
+                    if (isCanadaQuestion) {
+                        if (inCanada) {
+                            value = 'Yes';
+                        } else if (inUS) {
+                            value = 'No';
+                        }
+                    } else if (isUSQuestion) {
+                        if (inUS) {
+                            value = value || 'Yes';
+                        } else if (inCanada) {
+                            value = 'No';
+                        }
+                    }
+                }
+
                 if (value !== undefined && value !== null && value !== '') {
                     bestMatch = { value, confidence, fieldKey };
                     //  = "${String(value).substring(0, 40)}..."`);
@@ -919,10 +1014,25 @@ class GenericStrategy {
                 return { value: "Yes", confidence: 95, fieldKey: "identity.security_clearance_eligible" };
             }
 
-            // Fallback for Authorized to Work (Default: Yes)
+            // Fallback for Authorized to Work
             if (features.normalized_combined.includes("authorized") && features.normalized_combined.includes("work")) {
-                // : "Yes"`);
-                return { value: "Yes", confidence: 90, fieldKey: "identity.authorized_to_work" };
+                const labelTextLower = features.label_text.toLowerCase();
+                const isCanadaQuestion = labelTextLower.includes('canada') || labelTextLower.includes('canadian');
+                const isUSQuestion = labelTextLower.includes('united states') || labelTextLower.includes(' u.s.') || labelTextLower.includes(' u.s.a.') || labelTextLower.includes('american') || /\bus\b/i.test(labelTextLower);
+                
+                const inUS = this.isCandidateInUS(normalizedData);
+                const inCanada = this.isCandidateInCanada(normalizedData);
+
+                let fallbackValue = 'Yes';
+                if (isCanadaQuestion) {
+                    if (inCanada) fallbackValue = 'Yes';
+                    else if (inUS) fallbackValue = 'No';
+                } else if (isUSQuestion) {
+                    if (inUS) fallbackValue = 'Yes';
+                    else if (inCanada) fallbackValue = 'No';
+                }
+                
+                return { value: fallbackValue, confidence: 90, fieldKey: "identity.authorized_to_work" };
             }
 
             // Fallback for Sponsorship (Default: No)
@@ -1014,32 +1124,34 @@ class GenericStrategy {
         return '';
     }
 
-    setInputValue(input, value, highlightType = 'green') {
+    async setInputValue(input, value, highlightType = 'green') {
         if (!input || (!value && highlightType !== 'red')) return;
 
         input.dataset.afStatus = 'filled';
 
         if (value) {
-            if (input.tagName === 'SELECT') {
+            const isSelect = input.tagName === 'SELECT';
+            const isCombobox = input.getAttribute('role') === 'combobox' || 
+                               input.getAttribute('aria-autocomplete') === 'list' ||
+                               input.classList.contains('select__input') ||
+                               input.classList.contains('select2-input') ||
+                               input.closest('[class*="select-container"]') ||
+                               input.closest('[class*="select-shell"]') ||
+                               (input.id && input.id.toLowerCase().includes('location')) ||
+                               (input.name && input.name.toLowerCase().includes('location')) ||
+                               (input.placeholder && input.placeholder.toLowerCase().includes('location'));
+
+            if (isSelect) {
                 this.setSelectValue(input, value);
+            } else if (isCombobox && typeof ComboboxHandler !== 'undefined') {
+                try {
+                    await ComboboxHandler.fillCombobox(input, value, { debug: true });
+                } catch (e) {
+                    console.error('[GenericStrategy] Combobox fill error, falling back to direct value set:', e);
+                    this.setDirectValue(input, value);
+                }
             } else {
-                // Use the native setter to bypass React's value interception
-                const proto = input.tagName === 'TEXTAREA'
-                    ? window.HTMLTextAreaElement.prototype
-                    : window.HTMLInputElement.prototype;
-                const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-
-                if (nativeSetter) {
-                    nativeSetter.call(input, value);
-                } else {
-                    input.value = value;
-                }
-
-                // Also update the value tracker if it exists (React 15/16+)
-                const tracker = input._valueTracker;
-                if (tracker) {
-                    tracker.setValue('');
-                }
+                this.setDirectValue(input, value);
             }
 
             // Dispatch events to satisfy modern frameworks
@@ -1065,6 +1177,27 @@ class GenericStrategy {
                 input.style.backgroundColor = originalBg;
                 input.style.border = originalBorder;
             }, 3000);
+        }
+    }
+
+    setDirectValue(input, value) {
+        if (!input) return;
+        // Use the native setter to bypass React's value interception
+        const proto = input.tagName === 'TEXTAREA'
+            ? window.HTMLTextAreaElement.prototype
+            : window.HTMLInputElement.prototype;
+        const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+
+        if (nativeSetter) {
+            nativeSetter.call(input, value);
+        } else {
+            input.value = value;
+        }
+
+        // Also update the value tracker if it exists (React 15/16+)
+        const tracker = input._valueTracker;
+        if (tracker) {
+            tracker.setValue('');
         }
     }
 

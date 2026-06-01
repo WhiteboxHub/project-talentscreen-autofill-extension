@@ -417,7 +417,7 @@ class SuccessFactorsStrategy extends GenericStrategy {
         if (this._hasUploadedResume) return;
 
         // Fallback: Look for SF-specific upload patterns
-        const sessionKey = `af_uploaded_${window.location.hostname}`;
+        const sessionKey = `af_uploaded_${window.location.hostname}${window.location.pathname}`;
         const fileIdentifier = `${resumeFile.name}_${resumeFile.size}`;
 
         if (!this.isManual && sessionStorage.getItem(sessionKey) === fileIdentifier) {
@@ -452,11 +452,20 @@ class SuccessFactorsStrategy extends GenericStrategy {
                     fileInput.files = dataTransfer.files;
 
                     ['change', 'input', 'blur'].forEach(ev => {
-                        fileInput.dispatchEvent(new Event(ev, { bubbles: true }));
+                        fileInput.dispatchEvent(new Event(ev, { bubbles: true, composed: true }));
                     });
+
+                    // Trigger jQuery change event if jQuery is available on the page
+                    try {
+                        const $ = window.jQuery || window.$;
+                        if ($ && typeof $.fn !== 'undefined') {
+                            $(fileInput).trigger('change');
+                        }
+                    } catch (e) { /* silent */ }
 
                     fileInput.dataset.afUploaded = 'true';
                     sessionStorage.setItem(sessionKey, fileIdentifier);
+                    sessionStorage.setItem(`af_uploaded_${window.location.hostname}`, 'true'); // content.js compatibility
                     this._hasUploadedResume = true;
                     break;
                 } catch (e) {
