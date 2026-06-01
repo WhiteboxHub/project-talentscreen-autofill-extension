@@ -201,7 +201,7 @@ class GreenhouseStrategy extends GenericStrategy {
                 await this.sleep(100);
             } else {
                 // Fallback: just try to type in the input
-                this.setInputValue(input, value);
+                await this.setInputValue(input, value);
                 // Press Enter to confirm if it's a searchable combobox
                 input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
             }
@@ -281,7 +281,7 @@ class GreenhouseStrategy extends GenericStrategy {
             'input[id*="country"], input[name*="country"], input[placeholder*="country" i]'
         );
         if (countryInput && !countryInput.value) {
-            this.setInputValue(countryInput, country);
+            await this.setInputValue(countryInput, country);
         }
     }
 
@@ -361,12 +361,18 @@ class GreenhouseStrategy extends GenericStrategy {
             'input[id*="linkedin"], input[name*="linkedin"], input[aria-label*="LinkedIn" i], input[placeholder*="linkedin" i]'
         );
         if (linkedinInput && !linkedinInput.value && contact.linkedin) {
-            this.setInputValue(linkedinInput, contact.linkedin);
+            await this.setInputValue(linkedinInput, contact.linkedin);
         }
 
         // Location / City — Greenhouse uses id="job_application_location" or similar.
         // Also handles aria-label and placeholder variations.
-        const cityLocation = contact.state ? `${contact.city}, ${contact.state}` : contact.city;
+        let cityLocation = contact.location || '';
+        if (!cityLocation) {
+            cityLocation = contact.state ? `${contact.city}, ${contact.state}` : (contact.city || '');
+        }
+        if (!cityLocation) {
+            cityLocation = contact.address || '';
+        }
         if (cityLocation) {
             // 1. Try Remix combobox first
             await this._fillRemixSelectInBlock(document, ['city', 'location', 'work from', 'where are you'], cityLocation);
@@ -380,7 +386,7 @@ class GreenhouseStrategy extends GenericStrategy {
                 'input[placeholder*="city" i], input[placeholder*="location" i]'
             );
             if (locationInput && !locationInput.value) {
-                this.setInputValue(locationInput, cityLocation);
+                await this.setInputValue(locationInput, cityLocation);
             }
 
             // 3. Label-based fallback: find any input whose label text contains 'location' or 'city'
@@ -390,7 +396,7 @@ class GreenhouseStrategy extends GenericStrategy {
                     if (inp.value || inp.dataset.afUserLocked) continue;
                     const label = (this.getLabelText(inp) || '').toLowerCase();
                     if (label.includes('location') || label.includes('city') || label.includes('where do you live') || label.includes('where are you')) {
-                        this.setInputValue(inp, cityLocation);
+                        await this.setInputValue(inp, cityLocation);
                         break;
                     }
                 }

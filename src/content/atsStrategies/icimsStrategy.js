@@ -86,7 +86,7 @@ class IcimsStrategy extends GenericStrategy {
         if (this._hasUploadedResume) return;
 
         // Fallback for ICIMS: find the first available file input that is not a cover letter
-        const sessionKey = `af_uploaded_${window.location.hostname}`;
+        const sessionKey = `af_uploaded_${window.location.hostname}${window.location.pathname}`;
         const fileIdentifier = `${resumeFile.name}_${resumeFile.size}`;
 
         if (!this.isManual && sessionStorage.getItem(sessionKey) === fileIdentifier) {
@@ -98,10 +98,15 @@ class IcimsStrategy extends GenericStrategy {
             if ((input.files && input.files.length > 0) || input.dataset.afUploaded === 'true') continue;
 
             const features = this.extractFeatures(input);
-            const combinedTxt = `${features.label_text} ${input.closest('div, fieldset')?.innerText || ""} ${input.parentElement?.parentElement?.innerText || ""} ${input.name || ""} ${input.id || ""}`.toLowerCase();
+            const labelTxt = features.label_text.toLowerCase();
+            const combinedTxt = `${labelTxt} ${input.closest('div, fieldset')?.innerText || ""} ${input.parentElement?.parentElement?.innerText || ""} ${input.name || ""} ${input.id || ""}`.toLowerCase();
 
             // Skip cover letter fields explicitly
-            if (combinedTxt.includes("cover")) continue;
+            const isCoverLetterField = labelTxt.includes("cover") || 
+                                       (input.name || "").toLowerCase().includes("cover") || 
+                                       (input.id || "").toLowerCase().includes("cover") ||
+                                       (input.placeholder && input.placeholder.toLowerCase().includes("cover"));
+            if (isCoverLetterField) continue;
 
             // In ICIMS, if it's a file input and not a cover letter, it's highly likely the resume input.
             try {
@@ -120,11 +125,20 @@ class IcimsStrategy extends GenericStrategy {
                 input.files = dataTransfer.files;
 
                 ['change', 'input', 'blur'].forEach(ev => {
-                    input.dispatchEvent(new Event(ev, { bubbles: true }));
+                    input.dispatchEvent(new Event(ev, { bubbles: true, composed: true }));
                 });
+
+                // Trigger jQuery change event if jQuery is available on the page
+                try {
+                    const $ = window.jQuery || window.$;
+                    if ($ && typeof $.fn !== 'undefined') {
+                        $(input).trigger('change');
+                    }
+                } catch (e) { /* silent */ }
 
                 input.dataset.afUploaded = 'true';
                 sessionStorage.setItem(sessionKey, fileIdentifier);
+                sessionStorage.setItem(`af_uploaded_${window.location.hostname}`, 'true'); // content.js compatibility
                 this._hasUploadedResume = true;
                 break;
             } catch (e) {

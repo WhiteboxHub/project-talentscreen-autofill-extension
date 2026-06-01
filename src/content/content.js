@@ -202,6 +202,38 @@ async function fillForm(data, manual = false, resume = null) {
     // --- Run Field Tracking ONLY AFTER form filling is completely done ---
     await new Promise(r => setTimeout(r, 1000)); // Let React settle
     runFinalFieldTracking();
+
+    // Sync final field reports to FormTracker and end the session
+    if (typeof FormTracker !== 'undefined' && FormTracker.getCurrentSession()) {
+        const report = window._finalFieldReport || [];
+
+        report.forEach(field => {
+            FormTracker.registerField(field.id, {
+                label: field.label,
+                type: field.type,
+                required: field.required,
+                confidence: field.confidence || 1.0
+            });
+
+            if (field.status === 'filled') {
+                FormTracker.markFilled(field.id, field.value, 'autofill');
+            } else if (field.status === 'failed') {
+                FormTracker.markFailed(field.id, 'Required field not filled');
+            } else if (field.status === 'needs_review') {
+                FormTracker.markNeedsReview(field.id, 'Needs manual review');
+            } else {
+                FormTracker.markSkipped(field.id, 'Optional field not filled');
+            }
+        });
+
+        const hasFailures = report.some(f => f.status === 'failed');
+        const sessionStatus = hasFailures ? 'partial' : 'completed';
+
+        FormTracker.endSession(sessionStatus);
+    } else if (typeof TrackingIntegration !== 'undefined' && TrackingIntegration.initialized) {
+        TrackingIntegration.endSession('completed');
+    }
+
     chrome.runtime.sendMessage({ action: 'tracking_completed' });
 
     const meta = extractJobMetadata();
