@@ -96,10 +96,10 @@
     <!-- Unsupported Page View -->
     <div id="unsupportedView" class="unsupported-view hidden">
       <div class="unsupported-card">
-        <div class="unsupported-icon">
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="12" cy="12" r="10"></circle>
-            <path d="M12 8v4M12 16h.01"></path>
+        <div class="unsupported-icon" style="width: 64px; height: 64px; background: var(--primary-light); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+            <line x1="12" y1="2" x2="12" y2="12"></line>
           </svg>
         </div>
         <h3 class="unsupported-title">Autofill Not Supported</h3>
@@ -226,8 +226,16 @@
             <span id="sessionAts" class="session-value">-</span>
           </div>
           <div class="session-row">
+            <span class="session-label">Company:</span>
+            <span id="sessionCompany" class="session-value">-</span>
+          </div>
+          <div class="session-row">
             <span class="session-label">Started:</span>
             <span id="sessionStart" class="session-value">-</span>
+          </div>
+          <div class="session-row">
+            <span class="session-label">Completion:</span>
+            <span id="sessionCompletion" class="session-value">0%</span>
           </div>
         </div>
 
@@ -539,31 +547,7 @@
           <div id="trackingSection" class="dashboard-section">
             <h4 style="margin: 0 0 16px 0;">Form Fill Tracking</h4>
 
-            <!-- Current Session -->
-            <div id="currentSessionCard" class="tracking-card hidden">
-              <div class="tracking-card-header">
-                <h5>Current Session</h5>
-                <span id="sessionStatusBadge" class="status-badge">In Progress</span>
-              </div>
-              <div class="session-details">
-                <div class="detail-row">
-                  <span>ATS Platform:</span>
-                  <strong id="trackingAts">-</strong>
-                </div>
-                <div class="detail-row">
-                  <span>Company:</span>
-                  <strong id="trackingCompany">-</strong>
-                </div>
-                <div class="detail-row">
-                  <span>Started:</span>
-                  <strong id="trackingStartTime">-</strong>
-                </div>
-                <div class="detail-row">
-                  <span>Completion:</span>
-                  <strong id="trackingCompletion">0%</strong>
-                </div>
-              </div>
-            </div>
+
 
             <!-- Field States Table -->
             <div class="tracking-card" style="margin-top: 16px;">

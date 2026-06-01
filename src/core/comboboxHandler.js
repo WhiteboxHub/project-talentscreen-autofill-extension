@@ -223,7 +223,8 @@ const ComboboxHandler = {
                 '[class*="menu"]',
                 'ul[role="listbox"]',
                 '.autocomplete-results',
-                '[class*="results"]'
+                '[class*="results"]',
+                '.pac-container' // Google Places Autocomplete container
             ];
 
             let dropdown = null;
@@ -245,7 +246,8 @@ const ComboboxHandler = {
                 'li',
                 '.item',
                 '[class*="option"]',
-                '[class*="item"]'
+                '[class*="item"]',
+                '.pac-item' // Google Places Autocomplete items
             ];
 
             let optionsList = [];

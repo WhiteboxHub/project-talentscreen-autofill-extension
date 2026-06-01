@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'teamtailor.com', 'ultipro.com', 'ukg.com', 'paycomonline.net',
         'paychex.com', 'oraclecloud.com', 'brassring.com', 'adp.com',
         'jobvite.com', 'rippling-ats.com', 'ats.rippling.com',
-        'jobvite.com', 'rippling-ats.com', 'silkroad.com'
+        'silkroad.com', 'kforce.com'
     ];
 
     // Setup View Elements
@@ -1222,7 +1222,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const statNeedsReview = document.getElementById('statNeedsReview');
     const sessionInfo = document.getElementById('sessionInfo');
     const sessionAts = document.getElementById('sessionAts');
+    const sessionCompany = document.getElementById('sessionCompany');
     const sessionStart = document.getElementById('sessionStart');
+    const sessionCompletion = document.getElementById('sessionCompletion');
     const viewFieldsBtn = document.getElementById('viewFieldsBtn');
 
     // Tracking dashboard elements
@@ -1278,6 +1280,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (statSkipped) statSkipped.textContent = skipped || 0;
         if (statFailed) statFailed.textContent = failed || 0;
         if (statNeedsReview) statNeedsReview.textContent = needs_review || 0;
+
+        if (sessionCompletion) {
+            sessionCompletion.textContent = `${percentage}% (${filled}/${total} fields)`;
+        }
 
         // Update tracking dashboard if open
         if (trackingCompletion) {
@@ -1441,27 +1447,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (sessionInfo) {
             sessionInfo.classList.remove('hidden');
             if (sessionAts) sessionAts.textContent = session.atsType || 'unknown';
+            if (sessionCompany) sessionCompany.textContent = session.company || 'N/A';
             if (sessionStart) sessionStart.textContent = formatTime(session.startTime);
-        }
-
-        if (currentSessionCard) {
-            currentSessionCard.classList.remove('hidden');
-            if (trackingAts) trackingAts.textContent = session.atsType || 'unknown';
-            if (trackingCompany) trackingCompany.textContent = session.company || 'N/A';
-            if (trackingStartTime) trackingStartTime.textContent = formatTime(session.startTime);
-            if (sessionStatusBadge) sessionStatusBadge.textContent = 'In Progress';
+            if (sessionCompletion) sessionCompletion.textContent = '0% (0/0 fields)';
         }
     }
 
     function handleSessionEnded(session) {
         if (sessionInfo) {
             sessionInfo.classList.add('hidden');
-        }
-
-        if (currentSessionCard) {
-            if (sessionStatusBadge) {
-                sessionStatusBadge.textContent = session.status.charAt(0).toUpperCase() + session.status.slice(1);
-            }
         }
 
         // Refresh tracking history
@@ -1590,6 +1584,31 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Fetch and initialize active session tracking from tab
+    function initActiveSessionTracking() {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (!tabs || !tabs[0] || !tabs[0].url) return;
+            if (!tabs[0].url.startsWith('http://') && !tabs[0].url.startsWith('https://')) return;
+
+            chrome.tabs.sendMessage(tabs[0].id, { action: 'get_tracking_data' }, (response) => {
+                if (chrome.runtime.lastError || !response || !response.currentSession) return;
+
+                const session = response.currentSession;
+                if (session.status === 'in_progress' || session.status === 'paused') {
+                    handleSessionStarted(session);
+
+                    updateProgressDisplay({
+                        filled: session.fields.filled,
+                        total: session.fields.total,
+                        skipped: session.fields.skipped,
+                        failed: session.fields.failed,
+                        needs_review: session.fields.needs_review
+                    });
+                }
+            });
+        });
+    }
+
     // Load tracking history
     function loadTrackingHistory() {
         if (typeof FormTracker !== 'undefined') {
@@ -1611,19 +1630,38 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        trackingHistoryList.innerHTML = history.map(session => `
-            <div class="tracking-history-item">
-                <div class="history-header">
-                    <strong>${session.company || session.atsType || 'Application'}</strong>
-                    <span class="status-badge status-${session.status}">${session.status}</span>
+        trackingHistoryList.innerHTML = history.map(session => {
+            let hostname = '';
+            try {
+                if (session.jobUrl) {
+                    hostname = new URL(session.jobUrl).hostname.replace('www.', '');
+                }
+            } catch (e) {
+                hostname = session.jobUrl || '';
+            }
+
+            return `
+                <div class="tracking-history-item" style="border-left: 3px solid ${session.status === 'completed' ? 'var(--success)' : 'var(--warning)'};">
+                    <div class="history-header">
+                        <strong>${session.company || 'Job Application'}</strong>
+                        <span class="status-badge status-${session.status}">${session.status}</span>
+                    </div>
+                    <div class="history-details" style="display: flex; flex-direction: column; gap: 4px; align-items: flex-start; width: 100%;">
+                        ${hostname ? `
+                        <div style="display: flex; align-items: center; gap: 4px; font-weight: 500;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                            <span>${hostname}</span>
+                        </div>` : ''}
+                        <div style="display: flex; gap: 12px; margin-top: 2px; width: 100%; justify-content: space-between;">
+                            <span>ATS: ${session.atsType}</span>
+                            <span>Filled: ${session.fields?.filled || 0}/${session.fields?.total || 0}</span>
+                            <span>${formatTime(session.startTime)}</span>
+                        </div>
+                    </div>
+                    ${session.fields?.failed > 0 ? `<p class="error-text" style="font-size: 0.7rem; color: var(--error); margin: 4px 0 0 0;">${session.fields.failed} failed</p>` : ''}
                 </div>
-                <div class="history-details">
-                    <span>${session.fields.filled}/${session.fields.total} fields filled</span>
-                    <span>${formatTime(session.startTime)}</span>
-                </div>
-                ${session.fields.failed > 0 ? `<p class="error-text">${session.fields.failed} failed</p>` : ''}
-            </div>
-        `).join('');
+            `;
+        }).join('');
     }
 
     // Clear tracking history
@@ -1741,5 +1779,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // === INITIALIZE ===
     init();
     loadTrackingHistory();
+    initActiveSessionTracking();
     initActionButtons();
 });

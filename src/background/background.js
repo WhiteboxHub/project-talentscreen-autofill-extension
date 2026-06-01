@@ -47,7 +47,7 @@ function isATSSite(url) {
     'taleo.net', 'successfactors.com', 'personio.com', 'recruitee.com',
     'teamtailor.com', 'ultipro.com', 'ukg.com', 'paycomonline.net',
     'paychex.com', 'oraclecloud.com', 'brassring.com', 'adp.com',
-    'jobvite.com', 'rippling-ats.com', 'silkroad.com'
+    'jobvite.com', 'rippling-ats.com', 'silkroad.com', 'kforce.com'
   ];
   return jobBoards.some(board => urlLower.includes(board));
 }
@@ -86,7 +86,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
     if (isJobSite) {
       // Show badge to indicate ATS site detected
-      chrome.action.setBadgeText({ text: '!', tabId });
+      chrome.action.setBadgeText({ text: 'ON', tabId });
       chrome.action.setBadgeBackgroundColor({ color: '#4CAF50', tabId });
       chrome.action.setTitle({ title: 'Click to open TalentScreen autofill', tabId });
 
@@ -110,7 +110,7 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
     const isJobSite = isATSSite(tab.url);
 
     if (isJobSite) {
-      chrome.action.setBadgeText({ text: '!', tabId: activeInfo.tabId });
+      chrome.action.setBadgeText({ text: 'ON', tabId: activeInfo.tabId });
       chrome.action.setBadgeBackgroundColor({ color: '#4CAF50', tabId: activeInfo.tabId });
       chrome.action.setTitle({ title: 'Click to open TalentScreen autofill', tabId: activeInfo.tabId });
 
@@ -135,7 +135,7 @@ chrome.windows.onCreated.addListener(async (window) => {
         console.log('[TalentScreen] New window opened with ATS site, attempting to open side panel');
 
         // Show badge
-        chrome.action.setBadgeText({ text: '!', tabId: activeTab.id });
+        chrome.action.setBadgeText({ text: 'ON', tabId: activeTab.id });
         chrome.action.setBadgeBackgroundColor({ color: '#4CAF50', tabId: activeTab.id });
         chrome.action.setTitle({ title: 'Click to open TalentScreen autofill', tabId: activeTab.id });
 
@@ -174,7 +174,7 @@ chrome.tabs.onCreated.addListener(async (tab) => {
         console.log('[TalentScreen] New tab created with ATS site');
 
         // Show badge
-        chrome.action.setBadgeText({ text: '!', tabId: tab.id });
+        chrome.action.setBadgeText({ text: 'ON', tabId: tab.id });
         chrome.action.setBadgeBackgroundColor({ color: '#4CAF50', tabId: tab.id });
         chrome.action.setTitle({ title: 'Click to open TalentScreen autofill', tabId: tab.id });
 

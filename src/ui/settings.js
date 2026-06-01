@@ -690,19 +690,38 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        trackingHistoryList.innerHTML = history.map(session => `
-            <div class="tracking-history-item">
-                <div class="history-header">
-                    <strong>${session.company || session.atsType || 'Application'}</strong>
-                    <span class="status-badge status-${session.status}">${session.status}</span>
+        trackingHistoryList.innerHTML = history.map(session => {
+            let hostname = '';
+            try {
+                if (session.jobUrl) {
+                    hostname = new URL(session.jobUrl).hostname.replace('www.', '');
+                }
+            } catch (e) {
+                hostname = session.jobUrl || '';
+            }
+
+            return `
+                <div class="tracking-history-item" style="border-left: 3px solid ${session.status === 'completed' ? 'var(--success)' : 'var(--warning)'};">
+                    <div class="history-header">
+                        <strong>${session.company || 'Job Application'}</strong>
+                        <span class="status-badge status-${session.status}">${session.status}</span>
+                    </div>
+                    <div class="history-details" style="display: flex; flex-direction: column; gap: 4px; align-items: flex-start; width: 100%;">
+                        ${hostname ? `
+                        <div style="display: flex; align-items: center; gap: 4px; font-weight: 500;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                            <span>${hostname}</span>
+                        </div>` : ''}
+                        <div style="display: flex; gap: 12px; margin-top: 2px; width: 100%; justify-content: space-between;">
+                            <span>ATS: ${session.atsType}</span>
+                            <span>Filled: ${session.fields?.filled || 0}/${session.fields?.total || 0}</span>
+                            <span>${formatTime(session.startTime)}</span>
+                        </div>
+                    </div>
+                    ${session.fields?.failed > 0 ? `<p class="error-text" style="font-size: 0.7rem; color: var(--error); margin: 4px 0 0 0;">${session.fields.failed} failed</p>` : ''}
                 </div>
-                <div class="history-details">
-                    <span>${session.fields?.filled || 0}/${session.fields?.total || 0} fields filled</span>
-                    <span>${formatTime(session.startTime)}</span>
-                </div>
-                ${session.fields?.failed > 0 ? `<p class="error-text">${session.fields.failed} failed</p>` : ''}
-            </div>
-        `).join('');
+            `;
+        }).join('');
     }
 
     // Retrieve active session from content script in active tab
