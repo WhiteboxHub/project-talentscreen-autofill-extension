@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TalentScreen - Whitebox Learning Autofill",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Intelligently autofills job applications across 26+ ATS platforms using your JSON resume data. Save time, apply faster.",
   "author": "Whitebox Learning - Sampath Velupula",
   "homepage_url": "https://chromewebstore.google.com/detail/talentscreen-autofill/bebdlhhpgmegdebdballinfmfnlpmeio",
