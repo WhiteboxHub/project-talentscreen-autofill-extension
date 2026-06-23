@@ -16,6 +16,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (win && win.id) port.postMessage({ action: 'register_window', windowId: win.id });
     });
 
+    // Notify background for analytics
+    chrome.runtime.sendMessage({ action: 'sidepanel_opened' });
+
     // Supported ATS platforms
     const SUPPORTED_ATS = [
         'greenhouse.io', 'lever.co', 'myworkdayjobs.com', 'workday.com',

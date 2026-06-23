@@ -1,6 +1,7 @@
 // Background service worker
 // TalentScreen - Whitebox Learning Autofill Extension v2.0
 importScripts('/src/core/resumeProcessor.js');
+importScripts('/src/background/analytics.js');
 
 try {
   if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
@@ -213,6 +214,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.action === 'log_submission') {
     logApplicationSubmission(request.url);
     sendResponse({ status: 'updated' });
+  } else if (request.action === 'sidepanel_opened') {
+    AnalyticsTracker.trackEvent('extension_open');
+    sendResponse({ status: 'tracked' });
   } else if (request.action === 'check_sidepanel_status') {
     const windowId = sender.tab?.windowId;
     sendResponse({ isOpen: windowId ? openSidePanelWindows.has(windowId) : false });
@@ -236,6 +240,13 @@ function logApplicationFill(data) {
       const hostname = new URL(data.url).hostname;
       pending[hostname] = { ...data, date: new Date().toISOString() };
       chrome.storage.local.set({ pendingSubmissions: pending });
+
+      // Track autofill completion in Google Analytics
+      AnalyticsTracker.trackEvent('autofill_completed', {
+        target_company: data.company || 'unknown',
+        job_role: data.role || 'unknown',
+        application_url: data.url || 'unknown'
+      });
     } catch (e) {
       console.error("AutoFill: Error parsing URL for pending submission:", e, data);
     }
@@ -270,6 +281,13 @@ function logApplicationSubmission(url) {
           });
           if (history.length > 50) history = history.slice(-50);
           chrome.storage.local.set({ applicationHistory: history });
+
+          // Track application submission in Google Analytics
+          AnalyticsTracker.trackEvent('application_submitted', {
+            target_company: data.company || 'unknown',
+            job_role: data.role || 'unknown',
+            application_url: data.url || 'unknown'
+          });
         }
         delete pending[hostname];
         chrome.storage.local.set({ pendingSubmissions: pending });

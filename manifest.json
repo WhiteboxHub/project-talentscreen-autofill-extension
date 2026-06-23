@@ -13,7 +13,7 @@
     "tabs"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self';"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://www.google-analytics.com https://analytics.google.com;"
   },
   "host_permissions": [
     "*://*.myworkdayjobs.com/*",
