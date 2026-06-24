@@ -99,4 +99,4 @@ class AnalyticsTracker {
 }
 
 // Make globally accessible in background script context
-self.AnalyticsTracker = AnalyticsTracker;
+self.AnalyticsTracker =  AnalyticsTracker;
