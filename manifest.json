@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TalentScreen - Whitebox Learning Autofill",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Intelligently autofills job applications across 26+ ATS platforms using your JSON resume data. Save time, apply faster.",
   "author": "Whitebox Learning - Sampath Velupula",
   "homepage_url": "https://chromewebstore.google.com/detail/talentscreen-autofill/bebdlhhpgmegdebdballinfmfnlpmeio",
@@ -13,9 +13,11 @@
     "tabs"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://www.google-analytics.com https://analytics.google.com;"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://www.google-analytics.com https://analytics.google.com https://whitebox-learning.com;"
   },
   "host_permissions": [
+    "http://localhost/*",
+    "https://*.whitebox-learning.com/*",
     "*://*.myworkdayjobs.com/*",
     "*://*.isolvedhire.com/*",
     "*://*.greenhouse.io/*",
@@ -143,6 +145,17 @@
         "src/content/content.js"
       ],
       "all_frames": true
+    },
+    {
+      "matches": [
+        "http://localhost:3000/*",
+        "http://localhost:5173/*",
+        "https://*.whitebox-learning.com/*"
+      ],
+      "js": [
+        "src/content/portalWatcher.js"
+      ],
+      "all_frames": false
     }
   ],
   "icons": {

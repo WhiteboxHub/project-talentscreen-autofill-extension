@@ -64,6 +64,31 @@ function extractLabelForMemory(input) {
         if (target && target.matches && target.matches('input, textarea, select, [contenteditable="true"], [role="textbox"], [role="combobox"]')) {
             if (e.isTrusted) target.dataset.afUserLocked = 'true';
 
+            // Post-fill: debounce a human-field patch to the backend when user edits after autofill
+            if (e.isTrusted && window._afFillCompleted) {
+                clearTimeout(window._afHumanPatchTimer);
+                window._afHumanPatchTimer = setTimeout(() => {
+                    const userLockedFields = document.querySelectorAll(
+                        'input[data-af-user-locked="true"], textarea[data-af-user-locked="true"], select[data-af-user-locked="true"]'
+                    );
+                    let humanCount = 0;
+                    userLockedFields.forEach(el => {
+                        const isAutofilled = el.dataset.afStatus === 'filled' ||
+                                             el.hasAttribute('data-autofilled') ||
+                                             el.dataset.afUploaded === 'true' ||
+                                             el.dataset.autofilled === 'true';
+                        if (!isAutofilled) humanCount++;
+                    });
+                    chrome.runtime.sendMessage({
+                        action: 'log_human_patch',
+                        data: {
+                            ...(window._afLastFillMeta || {}),
+                            human: humanCount
+                        }
+                    });
+                }, 2000);
+            }
+
             // If it has a meaningful value, save it to memory so React can't wipe it out!
             // BUT: Don't add fields with default values like "Select" or "Choose"
             const val = target.type === 'checkbox' || target.type === 'radio' ? target.checked : target.value;
@@ -237,16 +262,37 @@ async function fillForm(data, manual = false, resume = null) {
     chrome.runtime.sendMessage({ action: 'tracking_completed' });
 
     const meta = extractJobMetadata();
+    const report = window._finalFieldReport || [];
+    const totalFromReport = report.length;
+    const filledFromReport = report.filter(f => f.status === 'filled').length;
+    const humanFilledCount = (() => {
+        const userLockedFields = document.querySelectorAll(
+            'input[data-af-user-locked="true"], textarea[data-af-user-locked="true"], select[data-af-user-locked="true"]'
+        );
+        let count = 0;
+        userLockedFields.forEach(el => {
+            // Exclude fields already marked as autofilled by the extension itself
+            const isAutofilled = el.dataset.afStatus === 'filled' ||
+                                 el.hasAttribute('data-autofilled') ||
+                                 el.dataset.afUploaded === 'true' ||
+                                 el.dataset.autofilled === 'true';
+            if (!isAutofilled) count++;
+        });
+        return count;
+    })();
     chrome.runtime.sendMessage({ 
         action: 'log_fill', 
         data: { 
             url: window.location.href, 
             company: meta.company, 
             role: meta.role,
-            filled: counts.filled,
-            total: counts.total
+            filled: totalFromReport > 0 ? filledFromReport : counts.filled,
+            total: totalFromReport > 0 ? totalFromReport : counts.total,
+            human: humanFilledCount
         } 
     });
+    window._afFillCompleted = true;
+    window._afLastFillMeta = { url: window.location.href, company: meta.company, role: meta.role };
 }
 
 function runFinalFieldTracking() {
