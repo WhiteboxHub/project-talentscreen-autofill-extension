@@ -211,9 +211,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'log_fill') {
     logApplicationFill(request.data);
     sendResponse({ status: 'logged' });
-  } else if (request.action === 'log_human_patch') {
-    sendHumanPatch(request.data);
-    sendResponse({ status: 'patched' });
   } else if (request.action === 'log_submission') {
     logApplicationSubmission(request.url);
     sendResponse({ status: 'updated' });
@@ -250,9 +247,6 @@ function logApplicationFill(data) {
         job_role: data.role || 'unknown',
         application_url: data.url || 'unknown'
       });
-
-      // Send bulk telemetry report to FastAPI backend immediately when fill completes
-      sendTelemetryReport(data);
     } catch (e) {
       console.error("AutoFill: Error parsing URL for pending submission:", e, data);
     }
@@ -302,121 +296,6 @@ function logApplicationSubmission(url) {
   } catch (e) {
     console.error("AutoFill: Error parsing URL for submission:", e, url);
   }
-}
-
-/**
- * Determine ATS platform name from URL
- */
-function getAtsPlatform(url) {
-  if (!url) return 'unknown';
-  try {
-    const urlLower = url.toLowerCase();
-    const jobBoards = [
-      'greenhouse.io', 'lever.co', 'myworkdayjobs.com', 'workday.com',
-      'smartrecruiters.com', 'applytojob.com', 'ashbyhq.com', 'bamboohr.com',
-      'icims.com', 'indeed.com', 'linkedin.com', 'workable.com',
-      'taleo.net', 'successfactors.com', 'personio.com', 'recruitee.com',
-      'teamtailor.com', 'ultipro.com', 'ukg.com', 'paycomonline.net',
-      'paychex.com', 'oraclecloud.com', 'brassring.com', 'adp.com',
-      'jobvite.com', 'rippling-ats.com', 'silkroad.com', 'kforce.com'
-    ];
-    for (const board of jobBoards) {
-      if (urlLower.includes(board)) {
-        return board.split('.')[0];
-      }
-    }
-  } catch (e) {
-    console.error('[Telemetry] Error parsing ATS platform:', e);
-  }
-  return 'unknown';
-}
-
-/**
- * Send application telemetry report to Whitebox Learning backend
- */
-function sendTelemetryReport(data) {
-  chrome.storage.local.get(['normalizedData', 'resumeData', 'userEmail'], (result) => {
-    const candidateName = result.normalizedData?.identity?.full_name || result.resumeData?.basics?.name || "Anonymous";
-    const userEmail = result.userEmail || "";
-
-    const totalFields = data.total || 0;
-    const autofillFields = data.filled || 0;
-    const humanFields = data.human || 0;
-    const filledTotal = autofillFields + humanFields;
-    const automationRate = filledTotal > 0 ? (autofillFields / filledTotal) * 100 : 0.0;
-
-    const payload = [
-      {
-        candidate_name: candidateName,
-        company_name: data.company || "Unknown",
-        ats_platform: getAtsPlatform(data.url),
-        total_fields: totalFields,
-        autofill_fields: autofillFields,
-        llm_fields: 0,
-        human_fields: humanFields >= 0 ? humanFields : 0,
-        automation_rate: parseFloat(automationRate.toFixed(4))
-      }
-    ];
-
-    const headers = {
-      "Content-Type": "application/json",
-      "X-Candidate-Email": userEmail
-    };
-
-    console.log('[Telemetry] Sending report to Whitebox Learning backend:', payload);
-
-    fetch("https://whitebox-learning.com/api/reports/applications/bulk", {
-      method: "POST",
-      headers: headers,
-      body: JSON.stringify(payload)
-    })
-    .then(async (response) => {
-      if (!response.ok) {
-        const text = await response.text();
-        console.error('[Telemetry] Failed to send telemetry report:', response.status, text);
-      } else {
-        const resData = await response.json();
-        console.log('[Telemetry] Telemetry report sent successfully:', resData);
-      }
-    })
-    .catch((err) => {
-      console.error('[Telemetry] Error sending telemetry report:', err);
-    });
-  });
-}
-
-/**
- * PATCH human_fields on the most recent backend record for this session
- */
-function sendHumanPatch(data) {
-  chrome.storage.local.get(['userEmail'], (result) => {
-    const userEmail = result.userEmail || "";
-    const payload = {
-      url: data.url || "",
-      human_fields: data.human || 0
-    };
-    const headers = {
-      "Content-Type": "application/json",
-      "X-Candidate-Email": userEmail
-    };
-    console.log('[Telemetry] Sending human-field patch:', payload);
-    fetch("https://whitebox-learning.com/api/reports/applications/patch-human", {
-      method: "PATCH",
-      headers: headers,
-      body: JSON.stringify(payload)
-    })
-    .then(async (response) => {
-      if (!response.ok) {
-        const text = await response.text();
-        console.error('[Telemetry] Human patch failed:', response.status, text);
-      } else {
-        console.log('[Telemetry] Human patch applied successfully');
-      }
-    })
-    .catch((err) => {
-      console.error('[Telemetry] Error sending human patch:', err);
-    });
-  });
 }
 
 /**

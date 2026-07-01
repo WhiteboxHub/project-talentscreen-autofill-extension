@@ -16,7 +16,6 @@
     "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://www.google-analytics.com https://analytics.google.com https://whitebox-learning.com;"
   },
   "host_permissions": [
-    "http://localhost/*",
     "https://*.whitebox-learning.com/*",
     "*://*.myworkdayjobs.com/*",
     "*://*.isolvedhire.com/*",
@@ -145,17 +144,6 @@
         "src/content/content.js"
       ],
       "all_frames": true
-    },
-    {
-      "matches": [
-        "http://localhost:3000/*",
-        "http://localhost:5173/*",
-        "https://*.whitebox-learning.com/*"
-      ],
-      "js": [
-        "src/content/portalWatcher.js"
-      ],
-      "all_frames": false
     }
   ],
   "icons": {
