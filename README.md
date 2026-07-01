@@ -1,6 +1,6 @@
 # 🚀 TalentScreen - Whitebox Learning Autofill
 
-![Version](https://img.shields.io/badge/version-2.1.2-blue.svg)
+![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Chrome-orange.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
@@ -171,7 +171,7 @@ npm install
 # Lint JavaScript files
 npm run lint
 
-# Build production ZIP
+# Build production ZIP (outputs to dist/talentscreen-autofill-v*.zip)
 npm run build
 
 # Run tests (placeholder)

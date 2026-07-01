@@ -23,7 +23,7 @@ function extractLabelForMemory(input) {
         const lEl = document.getElementById(input.getAttribute('aria-labelledby'));
         if (lEl) label = lEl.innerText;
     }
-    
+
     if (!label) {
         const wrapper = input.closest('.MuiFormControl-root, .form-group, .field, [class*="field-"], [class*="formField"], div[role="group"]');
         if (wrapper) {
@@ -31,7 +31,7 @@ function extractLabelForMemory(input) {
             if (lEl) label = lEl.innerText;
         }
     }
-    
+
     if (!label) {
         let curr = input;
         for (let i = 0; i < 5; i++) {
@@ -52,7 +52,7 @@ function extractLabelForMemory(input) {
 
     if (!label) label = input.getAttribute('aria-label') || input.placeholder;
     if (!label && input.type === 'file') label = 'Resume / File Upload';
-    
+
     if (label) return label.replace(/\n/g, ' ').replace(/[\*:]/g, '').trim().toLowerCase();
     return null;
 }
@@ -63,31 +63,6 @@ function extractLabelForMemory(input) {
         const target = e.target;
         if (target && target.matches && target.matches('input, textarea, select, [contenteditable="true"], [role="textbox"], [role="combobox"]')) {
             if (e.isTrusted) target.dataset.afUserLocked = 'true';
-
-            // Post-fill: debounce a human-field patch to the backend when user edits after autofill
-            if (e.isTrusted && window._afFillCompleted) {
-                clearTimeout(window._afHumanPatchTimer);
-                window._afHumanPatchTimer = setTimeout(() => {
-                    const userLockedFields = document.querySelectorAll(
-                        'input[data-af-user-locked="true"], textarea[data-af-user-locked="true"], select[data-af-user-locked="true"]'
-                    );
-                    let humanCount = 0;
-                    userLockedFields.forEach(el => {
-                        const isAutofilled = el.dataset.afStatus === 'filled' ||
-                                             el.hasAttribute('data-autofilled') ||
-                                             el.dataset.afUploaded === 'true' ||
-                                             el.dataset.autofilled === 'true';
-                        if (!isAutofilled) humanCount++;
-                    });
-                    chrome.runtime.sendMessage({
-                        action: 'log_human_patch',
-                        data: {
-                            ...(window._afLastFillMeta || {}),
-                            human: humanCount
-                        }
-                    });
-                }, 2000);
-            }
 
             // If it has a meaningful value, save it to memory so React can't wipe it out!
             // BUT: Don't add fields with default values like "Select" or "Choose"
@@ -147,15 +122,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 const wrapper = target.closest('.MuiFormControl-root, .form-group, .field, [class*="field-"], [class*="formField"], div[role="group"], label') || target.parentElement;
                 if (wrapper) target = wrapper;
             }
-            
+
             target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            
+
             // Flash a green border around the field for 2 seconds
             const originalBoxShadow = target.style.boxShadow;
             const originalTransition = target.style.transition;
             target.style.transition = 'box-shadow 0.3s ease-in-out';
             target.style.boxShadow = '0 0 0 4px rgba(0, 217, 165, 0.5)';
-            
+
             setTimeout(() => {
                 target.style.boxShadow = originalBoxShadow;
                 setTimeout(() => { target.style.transition = originalTransition; }, 300);
@@ -210,7 +185,7 @@ async function fillForm(data, manual = false, resume = null) {
     let counts = { filled: 0, total: 0 };
     try {
         const strategy = ATSStrategyRegistry.getStrategy(window.location.href, document);
-        
+
         const atsType = strategy ? strategy.constructor.name.replace('Strategy', '').toLowerCase() : 'unknown';
         if (typeof TrackingIntegration !== 'undefined' && !TrackingIntegration.initialized) {
             TrackingIntegration.init(atsType, strategy ? strategy.constructor.name : null);
@@ -262,45 +237,24 @@ async function fillForm(data, manual = false, resume = null) {
     chrome.runtime.sendMessage({ action: 'tracking_completed' });
 
     const meta = extractJobMetadata();
-    const report = window._finalFieldReport || [];
-    const totalFromReport = report.length;
-    const filledFromReport = report.filter(f => f.status === 'filled').length;
-    const humanFilledCount = (() => {
-        const userLockedFields = document.querySelectorAll(
-            'input[data-af-user-locked="true"], textarea[data-af-user-locked="true"], select[data-af-user-locked="true"]'
-        );
-        let count = 0;
-        userLockedFields.forEach(el => {
-            // Exclude fields already marked as autofilled by the extension itself
-            const isAutofilled = el.dataset.afStatus === 'filled' ||
-                                 el.hasAttribute('data-autofilled') ||
-                                 el.dataset.afUploaded === 'true' ||
-                                 el.dataset.autofilled === 'true';
-            if (!isAutofilled) count++;
-        });
-        return count;
-    })();
-    chrome.runtime.sendMessage({ 
-        action: 'log_fill', 
-        data: { 
-            url: window.location.href, 
-            company: meta.company, 
+    chrome.runtime.sendMessage({
+        action: 'log_fill',
+        data: {
+            url: window.location.href,
+            company: meta.company,
             role: meta.role,
-            filled: totalFromReport > 0 ? filledFromReport : counts.filled,
-            total: totalFromReport > 0 ? totalFromReport : counts.total,
-            human: humanFilledCount
-        } 
+            filled: counts.filled,
+            total: counts.total
+        }
     });
-    window._afFillCompleted = true;
-    window._afLastFillMeta = { url: window.location.href, company: meta.company, role: meta.role };
 }
 
 function runFinalFieldTracking() {
     const fieldsMap = new Map();
-    
+
     // Only grab visible, interactive elements to avoid React hidden state gibberish
     const inputs = document.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="search"]), select, textarea, [role="combobox"], [role="textbox"], [contenteditable="true"]');
-    
+
     inputs.forEach(input => {
         if (input.classList && input.classList.contains('select2-hidden-accessible')) return;
         if (input.type !== 'file' && input.offsetWidth === 0 && input.offsetHeight === 0 && !input.closest('[role="combobox"]')) return;
@@ -312,7 +266,7 @@ function runFinalFieldTracking() {
 
         let rawLabelHtml = '';
         let label = '';
-        
+
         if (input.labels && input.labels.length > 0) {
             label = input.labels[0].innerText;
             rawLabelHtml = input.labels[0].innerHTML;
@@ -333,7 +287,7 @@ function runFinalFieldTracking() {
                 rawLabelHtml = lEl.innerHTML;
             }
         }
-        
+
         if (!label) {
             const wrapper = input.closest('.MuiFormControl-root, .form-group, .field, [class*="field-"], [class*="formField"], div[role="group"]');
             if (wrapper) {
@@ -372,7 +326,7 @@ function runFinalFieldTracking() {
 
         if (!label) label = input.getAttribute('aria-label') || input.placeholder;
         if (!label && input.type === 'file') label = 'Resume / File Upload';
-        
+
         if (!label) {
             let fallback = input.name || input.id || '';
             if (fallback && !fallback.includes(':') && fallback.length > 2 && !/\d{3,}/.test(fallback)) {
@@ -452,11 +406,11 @@ function runFinalFieldTracking() {
             label = 'File Upload';
         }
 
-    if (!label || label.toLowerCase() === 'unknown' || label.length < 2 || label.length > 2000) return;
+        if (!label || label.toLowerCase() === 'unknown' || label.length < 2 || label.length > 2000) return;
 
         let isFilled = fileWasUploaded;
         let val = fileWasUploaded ? 'File Uploaded' : '';
-        
+
         const inputsToCheck = [input];
         // File uploads don't need sibling absorption, and doing so causes cross-contamination between Resume and Cover Letter
         if (input.type !== 'file' && !label.toLowerCase().includes('resume') && !label.toLowerCase().includes('cover')) {
@@ -493,11 +447,11 @@ function runFinalFieldTracking() {
                         isFilled = true; val = tVal; break;
                     }
                 } else if (targetInput.getAttribute('role') === 'textbox') {
-                const txt = targetInput.innerText.trim();
-                const txtLower = txt.toLowerCase();
-                if (txt && !txtLower.startsWith('select') && !txtLower.startsWith('choose')) {
-                    isFilled = true; val = txt; break;
-                }
+                    const txt = targetInput.innerText.trim();
+                    const txtLower = txt.toLowerCase();
+                    if (txt && !txtLower.startsWith('select') && !txtLower.startsWith('choose')) {
+                        isFilled = true; val = txt; break;
+                    }
                 } else if (targetInput.getAttribute('role') === 'combobox') {
                     const txt = targetInput.innerText.trim();
                     const txtLower = txt.toLowerCase();
@@ -505,7 +459,7 @@ function runFinalFieldTracking() {
                         isFilled = true; val = txt; break;
                     }
                 }
-                
+
                 if (targetInput.dataset.afStatus === 'filled' || targetInput.dataset.afUserLocked === 'true' || targetInput.dataset.userFilled === 'true' || targetInput.dataset.afUploaded === 'true') {
                     isFilled = true;
                     if (!val) val = 'Completed';
@@ -541,8 +495,8 @@ function runFinalFieldTracking() {
 
         // Properly determine required status for file inputs
         const isRequired = input.required || input.getAttribute('aria-required') === 'true' ||
-                           rawLabelHtml.includes('*') || label.includes('*') ||
-                           (input.type === 'file' && (label.toLowerCase() === 'resume' || label.toLowerCase().includes('resume')));
+            rawLabelHtml.includes('*') || label.includes('*') ||
+            (input.type === 'file' && (label.toLowerCase() === 'resume' || label.toLowerCase().includes('resume')));
 
         // Ensure optional file fields (like Cover Letter) don't show as completed unless actually filled
         let status = isFilled ? 'filled' : (isRequired ? 'failed' : 'detected');
