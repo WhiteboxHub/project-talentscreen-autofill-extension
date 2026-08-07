@@ -53,6 +53,40 @@ function isATSSite(url) {
   return jobBoards.some(board => urlLower.includes(board));
 }
 
+function isTalentScreenAutofillRequest(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' && parsed.hostname === 'jobs.lever.co' &&
+      parsed.searchParams.get('talentscreen_autofill') === '1';
+  } catch (_) {
+    return false;
+  }
+}
+
+async function triggerTalentScreenAutofill(tabId) {
+  const stored = await chrome.storage.local.get(['resumeData', 'normalizedData', 'resumeFile']);
+  if (!stored.resumeData || !stored.resumeFile) {
+    console.warn('[TalentScreen] Automatic Lever autofill needs saved JSON and PDF resume data');
+    await chrome.action.setBadgeText({ text: '!', tabId });
+    await chrome.action.setBadgeBackgroundColor({ color: '#EF4444', tabId });
+    return;
+  }
+
+  const normalizedData = stored.normalizedData || ResumeProcessor.normalize(stored.resumeData);
+  chrome.tabs.sendMessage(tabId, {
+    action: 'fill_form',
+    data: stored.resumeData,
+    normalizedData,
+    resumeFile: stored.resumeFile,
+    manual: true,
+    autoTriggered: true
+  }, () => {
+    if (chrome.runtime.lastError) {
+      console.warn('[TalentScreen] Automatic Lever autofill could not reach the page:', chrome.runtime.lastError.message);
+    }
+  });
+}
+
 // Helper function to try opening side panel with retry
 async function tryOpenSidePanel(tabId, windowId, retryCount = 0) {
   const maxRetries = 3;
@@ -96,6 +130,10 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
       // Try to auto-open side panel
       await tryOpenSidePanel(tabId, tab.windowId);
+
+      if (isTalentScreenAutofillRequest(tab.url)) {
+        await triggerTalentScreenAutofill(tabId);
+      }
     } else {
       // Clear badge on non-ATS sites
       chrome.action.setBadgeText({ text: '', tabId });

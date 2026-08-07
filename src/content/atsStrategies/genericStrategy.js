@@ -65,7 +65,7 @@ class GenericStrategy {
     }
 
     normalizeYesNoDecline(valueStr) {
-        if (!valueStr) return '';
+        if (valueStr === undefined || valueStr === null || String(valueStr).trim() === '') return '';
         const val = String(valueStr).toLowerCase().trim();
 
         if (val === 'no' || val === 'false' || val === 'n' || val.startsWith('no,') ||
@@ -508,7 +508,7 @@ class GenericStrategy {
             }
 
             // Skip inputs that are already filled (unless forced)
-            if (input.value && input.value.trim() !== '') {
+            if (this.hasMeaningfulValue(input)) {
                 fillCount++;
                 input.dataset.afStatus = 'filled';
                 if (isValidUIField && window.TrackingIntegration && window.TrackingIntegration.initialized) {
@@ -1057,7 +1057,7 @@ class GenericStrategy {
      */
     handleRadioCheckbox(input, normalizedData) {
         const match = this.findValueForInput(input, normalizedData);
-        if (!match || (!match.value && match.value !== "")) return;
+        if (!match || match.value === undefined || match.value === null || match.value === "") return;
 
         const rawVal = String(match.value).toLowerCase();
         const val = this.normalizeYesNoDecline(rawVal);
@@ -1079,17 +1079,32 @@ class GenericStrategy {
                 (val !== 'no' && val !== 'yes' && val !== 'decline' && val.length > 2 && labelText.includes(val)); // only use broad includes if it's not a short affirmative/negative
 
             if (isPositiveMatch) {
-                input.checked = true;
-                this.setInputValue(input, null, 'green'); // Visual feedback
+                this.setInputChecked(input);
                 input.dataset.afStatus = 'filled';
             }
         } else if (input.type === 'checkbox') {
             if (val === 'yes' || val === 'true' || val === '1') {
-                input.checked = true;
-                this.setInputValue(input, null, 'green');
+                this.setInputChecked(input);
                 input.dataset.afStatus = 'filled';
             }
         }
+    }
+
+    hasMeaningfulValue(input) {
+        if (!input || !String(input.value || '').trim()) return false;
+        if (input.tagName !== 'SELECT') return true;
+        const option = input.options[input.selectedIndex];
+        const text = String(option?.text || input.value).trim().toLowerCase();
+        return !option?.disabled && !/^(select|choose|please select|--)/.test(text);
+    }
+
+    setInputChecked(input) {
+        if (!input || input.checked) return;
+        input.click();
+        if (!input.checked) input.checked = true;
+        ['input', 'change'].forEach(eventType => {
+            input.dispatchEvent(new Event(eventType, { bubbles: true, composed: true }));
+        });
     }
 
     getLabelText(input) {
