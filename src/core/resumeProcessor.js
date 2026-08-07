@@ -7,6 +7,15 @@
  */
 
 class ResumeProcessor {
+    static coerceBoolean(value) {
+        if (value === true || value === false) return value;
+        if (typeof value !== 'string' && typeof value !== 'number') return null;
+        const normalized = String(value).trim().toLowerCase();
+        if (['true', 'yes', 'y', '1'].includes(normalized)) return true;
+        if (['false', 'no', 'n', '0'].includes(normalized)) return false;
+        return null;
+    }
+
     static isPlainObject(value) {
         return !!value && typeof value === 'object' && !Array.isArray(value);
     }
@@ -327,15 +336,15 @@ class ResumeProcessor {
                 ...customFields.eeo
             };
 
-            // Default legal/authorization values
+            // Legal answers stay unknown unless the candidate supplied them.
             const legal = {
-                work_auth_us: true,
-                sponsorship_required_now: false,
-                sponsorship_required_future: false,
-                security_clearance: "no",
-                visa_status: "citizen",
-                work_authorization_expiration: "n/a",
-                notice_period_days: 14,
+                work_auth_us: null,
+                sponsorship_required_now: null,
+                sponsorship_required_future: null,
+                security_clearance: "",
+                visa_status: "",
+                work_authorization_expiration: "",
+                notice_period_days: null,
                 ...customFields.legal
             };
 
@@ -388,6 +397,17 @@ class ResumeProcessor {
             };
 
             const preferredName = "";
+            const workAuthorization = basics.workAuthorization || {};
+            const authorizedToWork = this.coerceBoolean(this.firstNonEmpty(
+                legal.work_auth_us,
+                findByPattern(workAuthorization, ["authorized", "authorization"])
+            ));
+            const sponsorshipNow = this.coerceBoolean(legal.sponsorship_required_now);
+            const sponsorshipFuture = this.coerceBoolean(legal.sponsorship_required_future);
+            const fallbackSponsorship = this.coerceBoolean(findByPattern(workAuthorization, ["sponsorship"]));
+            let sponsorshipRequired = fallbackSponsorship === null ? "" : fallbackSponsorship;
+            if (sponsorshipNow === true || sponsorshipFuture === true) sponsorshipRequired = true;
+            else if (sponsorshipNow === false && sponsorshipFuture === false) sponsorshipRequired = false;
 
             const identity = {
                 first_name: firstName,
@@ -400,10 +420,9 @@ class ResumeProcessor {
                 veteran_status: eeo.veteran_status || basics.veteranStatus || "",
                 disability_status: eeo.disability_status || basics.disabilityStatus || "",
                 ethnicity: eeo.ethnicity || basics.ethnicity || basics.race || (basics.demographics && (basics.demographics.ethnicity || basics.demographics.race)) || "",
-                sponsorship_required: legal.sponsorship_required_now || legal.sponsorship_required_future || (basics.workAuthorization && basics.workAuthorization.requiresSponsorshipNowOrFuture) ||
-                    findByPattern(basics.workAuthorization, ["sponsorship"]) || "",
+                sponsorship_required: sponsorshipRequired,
                 hispanic_latino: eeo.hispanic_latino || basics.hispanicLatino || (basics.demographics && basics.demographics.hispanicOrLatino) || "",
-                authorized_to_work: legal.work_auth_us !== undefined ? (legal.work_auth_us ? "Yes" : "No") : "",
+                authorized_to_work: authorizedToWork === null ? "" : (authorizedToWork ? "Yes" : "No"),
                 security_clearance_eligible: legal.security_clearance || "",
                 lgbtq: eeo.lgbtq || "",
                 relocation_open: logistics.willing_to_relocate || "",

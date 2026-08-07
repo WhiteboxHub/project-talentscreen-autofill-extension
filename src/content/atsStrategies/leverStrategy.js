@@ -14,8 +14,43 @@ class LeverStrategy extends GenericStrategy {
 
     findValueForInput(input, normalizedData) {
         let match = this.findLeverSpecificMatch(input, normalizedData);
-        if (match && match.value) return match;
+        if (match && match.value !== undefined && match.value !== null && match.value !== '') return match;
         return super.findValueForInput(input, normalizedData);
+    }
+
+    extractFeatures(input) {
+        const features = super.extractFeatures(input);
+        const question = this.getLeverQuestionText(input);
+        if (!question) return features;
+
+        const optionOnly = input.type === 'radio' || input.type === 'checkbox';
+        if (optionOnly || !features.label_text || features.label_text.length < question.length) {
+            features.label_text = question.toLowerCase();
+        }
+        features.nearby_text = `${question} ${features.nearby_text}`.toLowerCase();
+        features.normalized_combined = ResumeProcessor.normalizeText(
+            `${features.name_attr} ${features.id_attr} ${question} ${features.aria_label}`
+        );
+        return features;
+    }
+
+    getLeverQuestionText(input) {
+        const container = input.closest('.application-question, fieldset, [role="group"]') ||
+            input.closest('.application-field, .application-answer');
+        if (!container) return '';
+
+        const candidates = container.querySelectorAll(
+            'legend, .application-label, .question-label, [class*="question-label"], [class*="question-title"], label'
+        );
+        for (const candidate of candidates) {
+            if ((input.type === 'radio' || input.type === 'checkbox') &&
+                (candidate === input.parentElement || candidate.contains(input))) continue;
+            const text = (candidate.innerText || candidate.textContent || '').replace(/\s+/g, ' ').trim();
+            if (text && text.length <= 500) return text;
+        }
+
+        const text = (container.innerText || '').replace(/\s+/g, ' ').trim();
+        return text.length <= 500 ? text : '';
     }
 
     findLeverSpecificMatch(input, data) {
@@ -27,6 +62,28 @@ class LeverStrategy extends GenericStrategy {
         const identity = data?.identity || {};
         const contact = data?.contact || {};
         const employment = data?.employment || {};
+        const legal = data?.custom_fields?.legal || {};
+
+        if (labelTxt.includes('currently reside') || labelTxt.includes('currently located')) {
+            return {
+                value: this.isCandidateInUS(data) ? 'Yes' : 'No',
+                confidence: 98,
+                fieldKey: 'contact.country'
+            };
+        }
+
+        if (labelTxt.includes('us citizen') && labelTxt.includes('permanent resident') &&
+            (labelTxt.includes('opt') || labelTxt.includes('sponsorship'))) {
+            const sponsorshipRequired = this.normalizeYesNoDecline(identity.sponsorship_required);
+            const visaStatus = String(legal.visa_status || '').toLowerCase();
+            let value = '';
+            if (sponsorshipRequired === 'yes') value = 'Require Sponsorship';
+            else if (visaStatus.includes('citizen')) value = 'US Citizen';
+            else if (visaStatus.includes('permanent') || visaStatus.includes('green card')) value = 'Permanent Resident';
+            else if (visaStatus.includes('opt')) value = 'OPT';
+            if (!value) return null;
+            return { value, confidence: 98, fieldKey: 'custom_fields.legal.visa_status' };
+        }
 
         // 1. Basic Identity & Contact
         if (nameAttr === 'name' || labelTxt === 'full name') return { value: identity.full_name, confidence: 95 };

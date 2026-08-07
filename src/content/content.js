@@ -82,6 +82,21 @@ function extractLabelForMemory(input) {
 // Listen for messages from popup (Manual fallback or Edits)
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "fill_form") {
+        if (request.autoTriggered) {
+            if (window.top !== window) {
+                sendResponse({ status: "ignored_frame" });
+                return;
+            }
+            const runKey = 'talentscreen_lever_autofill_started';
+            if (sessionStorage.getItem(runKey) === 'true') {
+                sendResponse({ status: "already_started" });
+                return;
+            }
+            sessionStorage.setItem(runKey, 'true');
+            const cleanUrl = new URL(window.location.href);
+            cleanUrl.searchParams.delete('talentscreen_autofill');
+            history.replaceState(history.state, '', cleanUrl.href);
+        }
         fillForm(request.normalizedData, true, request.resumeFile);
         sendResponse({ status: "done" });
     } else if (request.action === "get_page_context") {
