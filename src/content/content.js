@@ -82,7 +82,7 @@ function extractLabelForMemory(input) {
 // Listen for messages from popup (Manual fallback or Edits)
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "fill_form") {
-        fillForm(request.normalizedData, true, request.resumeFile);
+        fillForm(request.normalizedData, true, request.resumeFile, { autoSubmit: request.autoSubmit !== false });
         sendResponse({ status: "done" });
     } else if (request.action === "get_page_context") {
         try {
@@ -181,10 +181,12 @@ function checkSuccessPage() {
     return (isSuccessText || isUrl) && inputs.length <= 5;
 }
 
-async function fillForm(data, manual = false, resume = null) {
+async function fillForm(data, manual = false, resume = null, options = {}) {
+    const autoSubmit = options.autoSubmit !== false && manual;
     let counts = { filled: 0, total: 0 };
+    let strategy = null;
     try {
-        const strategy = ATSStrategyRegistry.getStrategy(window.location.href, document);
+        strategy = ATSStrategyRegistry.getStrategy(window.location.href, document);
 
         const atsType = strategy ? strategy.constructor.name.replace('Strategy', '').toLowerCase() : 'unknown';
         if (typeof TrackingIntegration !== 'undefined' && !TrackingIntegration.initialized) {
@@ -196,6 +198,9 @@ async function fillForm(data, manual = false, resume = null) {
         if (strategy) {
             strategy.isManual = manual;
             counts = await strategy.execute(data, resume) || counts;
+            if (autoSubmit && typeof strategy.attemptManualSubmitFlow === 'function') {
+                await strategy.attemptManualSubmitFlow();
+            }
         }
     } catch (err) { /* silent error for generic strategy */ }
 
@@ -590,52 +595,78 @@ function extractJobDescription() {
 // Phase 4: Smart Autofill Features
 // ============================================
 
-if (typeof DynamicFormWatcher !== 'undefined') {
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
+const isTalentScreenHost = window.location.hostname.includes('whitebox-learning.com') ||
+                           window.location.hostname === 'localhost' ||
+                           window.location.hostname === '127.0.0.1';
+
+if (!isTalentScreenHost) {
+    if (typeof DynamicFormWatcher !== 'undefined') {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                DynamicFormWatcher.init();
+            });
+        } else {
             DynamicFormWatcher.init();
+        }
+
+        document.addEventListener('dynamicFieldsDetected', (e) => {
+            console.log('[Content] New fields detected:', e.detail.fields.length);
         });
-    } else {
-        DynamicFormWatcher.init();
+
+        document.addEventListener('dropdownsLoaded', (e) => {
+            console.log('[Content] Dropdowns loaded:', e.detail.dropdowns.length);
+        });
+
+        document.addEventListener('pageChanged', (e) => {
+            console.log('[Content] Page changed:', e.detail.url);
+            autoFillState.hasRun = false;
+        });
+
+        document.addEventListener('autoContinueAutofill', async () => {
+            console.log('[Content] Auto-continuing autofill on new page');
+            const result = await chrome.storage.local.get(['resumeData', 'normalizedData']);
+            if (result.normalizedData) {
+                fillForm(result.normalizedData, false, result.resumeFile);
+            }
+        });
     }
 
-    document.addEventListener('dynamicFieldsDetected', (e) => {
-        console.log('[Content] New fields detected:', e.detail.fields.length);
-    });
+    if (typeof CaptchaDetector !== 'undefined') {
+        window.addEventListener('load', () => {
+            const captchaStatus = CaptchaDetector.getStatus();
 
-    document.addEventListener('dropdownsLoaded', (e) => {
-        console.log('[Content] Dropdowns loaded:', e.detail.dropdowns.length);
-    });
+            if (captchaStatus.present && !captchaStatus.solved) {
+                console.warn('[Content] CAPTCHA detected:', captchaStatus.type);
+                showToast(`⚠️ ${captchaStatus.message}`, 'info');
 
-    document.addEventListener('pageChanged', (e) => {
-        console.log('[Content] Page changed:', e.detail.url);
-        autoFillState.hasRun = false;
-    });
-
-    document.addEventListener('autoContinueAutofill', async () => {
-        console.log('[Content] Auto-continuing autofill on new page');
-        const result = await chrome.storage.local.get(['resumeData', 'normalizedData']);
-        if (result.normalizedData) {
-            fillForm(result.normalizedData, false, result.resumeFile);
-        }
-    });
-}
-
-if (typeof CaptchaDetector !== 'undefined') {
-    window.addEventListener('load', () => {
-        const captchaStatus = CaptchaDetector.getStatus();
-
-        if (captchaStatus.present && !captchaStatus.solved) {
-            console.warn('[Content] CAPTCHA detected:', captchaStatus.type);
-            showToast(`⚠️ ${captchaStatus.message}`, 'info');
-
-            chrome.runtime.sendMessage({
-                action: 'captcha_detected',
-                type: captchaStatus.type,
-                message: captchaStatus.message
-            });
-        }
-    });
+                chrome.runtime.sendMessage({
+                    action: 'captcha_detected',
+                    type: captchaStatus.type,
+                    message: captchaStatus.message
+                });
+            }
+        });
+    }
 }
 
 console.log('[Content] Phase 4 features initialized');
+
+function isDeadJobPage() {
+    const title = (document.title || '').toLowerCase();
+    const body = (document.body?.innerText || '').slice(0, 8000).toLowerCase();
+    const blob = `${title} ${body}`;
+    if (/\b404\b/.test(blob) && /not found|page not found|can't find that page|can't find this page|we can't find/.test(blob)) return true;
+    if (/no longer accepting applications?/.test(blob)) return true;
+    return false;
+}
+
+function checkLaunchPageStatus(attempt) {
+    chrome.runtime.sendMessage({ action: 'get_talentscreen_launch_context' }, (ctx) => {
+        if (chrome.runtime.lastError || !ctx) return;
+        if (isDeadJobPage()) {
+            chrome.runtime.sendMessage({ action: 'job_page_dead' });
+        }
+    });
+}
+
+setTimeout(() => checkLaunchPageStatus(0), 2500);

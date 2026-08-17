@@ -8,6 +8,7 @@ class GenericStrategy {
         this._hasUploadedResume = false;
         this._lastProgressionUrl = null;
         this._progressionAttempts = 0;
+        this._lastManualSubmitClick = false;
         this.MAX_PROGRESSION_ATTEMPTS = 3; // Prevent infinite progression loops
 
         // Field Mapping Dictionary
@@ -635,11 +636,26 @@ class GenericStrategy {
         return { filled: fillCount, total: totalInteractable };
     }
 
+    /** Side-panel Autofill: fill then walk Next/Review/Submit steps. */
+    async attemptManualSubmitFlow() {
+        if (!this.isManual) return;
+        const maxSteps = 8;
+        for (let step = 0; step < maxSteps; step++) {
+            await this.sleep(1400);
+            const beforeUrl = window.location.href;
+            await this.attemptMultiStepProgression({ manualSubmit: true });
+            const clicked = this._lastManualSubmitClick;
+            this._lastManualSubmitClick = false;
+            if (!clicked && beforeUrl === window.location.href && step > 0) break;
+        }
+    }
+
     /**
      * Generic multi-step form progression handler
      * Attempts to find and click "Next", "Continue", or similar buttons
      */
-    async attemptMultiStepProgression() {
+    async attemptMultiStepProgression(options = {}) {
+        const manualSubmit = options.manualSubmit === true && this.isManual;
         // Prevent infinite loops - track URL changes and attempt count
         const currentUrl = window.location.href;
         if (this._lastProgressionUrl === currentUrl && this._progressionAttempts >= this.MAX_PROGRESSION_ATTEMPTS) {
@@ -664,17 +680,18 @@ class GenericStrategy {
             return !field.value || field.value.trim() === '';
         });
 
-        if (unfilledRequired.length > 0) {
+        if (unfilledRequired.length > 0 && !manualSubmit) {
             return; // Don't proceed if required fields are unfilled
         }
 
         // Look for navigation buttons
-        const nextButton = this.findProgessionButton();
+        const nextButton = this.findProgessionButton(manualSubmit);
         if (nextButton) {
             try {
                 nextButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 await this.sleep(300);
                 nextButton.click();
+                if (manualSubmit) this._lastManualSubmitClick = true;
             } catch (e) {
                 console.log('[GenericStrategy] Error clicking progression button:', e.message);
             }
@@ -684,7 +701,7 @@ class GenericStrategy {
     /**
      * Find "Next", "Continue", "Submit", or similar progression buttons
      */
-    findProgessionButton() {
+    findProgessionButton(manualSubmit = false) {
         const selectors = [
             'button:not([style*="display: none"])',
             '[role="button"]',
@@ -704,10 +721,9 @@ class GenericStrategy {
             });
 
         // Look for buttons with progression-related text
-        const progressionPatterns = [
-            'next', 'continue', 'next step', 'proceed', 'forward',
-            'submit', 'apply', 'send application'
-        ];
+        const progressionPatterns = manualSubmit
+            ? ['review', 'submit application', 'submit', 'send application', 'next', 'continue', 'next step', 'proceed']
+            : ['next', 'continue', 'next step', 'proceed', 'forward', 'submit', 'apply', 'send application'];
 
         const progressButton = buttons.find(b => {
             const text = (b.innerText || b.textContent || b.getAttribute('aria-label') || '').toLowerCase().trim();

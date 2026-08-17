@@ -1,5 +1,45 @@
-// Background service worker
-// TalentScreen - Whitebox Learning Autofill Extension v2.0
+async function fetchWblAutofillContext(wblAuth) {
+  if (!wblAuth?.token || !wblAuth?.candidateId || !wblAuth?.apiUrl) {
+    console.warn('[TalentScreen] fetch skipped — missing wblAuth fields');
+    return null;
+  }
+  const base = wblAuth.apiUrl.endsWith('/api') ? wblAuth.apiUrl : `${wblAuth.apiUrl}/api`;
+  const url = `${base}/candidates/${wblAuth.candidateId}/autofill-context`;
+  try {
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${wblAuth.token}` },
+    });
+    if (!response.ok) {
+      console.warn('[TalentScreen] autofill-context HTTP', response.status, url);
+      return null;
+    }
+    return response.json();
+  } catch (e) {
+    console.warn('[TalentScreen] autofill-context fetch error:', e.message);
+    return null;
+  }
+}
+
+async function uploadResumeToMyResume(resumeFile, wblAuth) {
+  if (!wblAuth?.token || !wblAuth?.candidateId || !wblAuth?.apiUrl) {
+    return { status: 'no_auth' };
+  }
+  const blob = await fetch(resumeFile.data).then((r) => r.blob());
+  const formData = new FormData();
+  formData.append('file', blob, resumeFile.name || 'resume.pdf');
+  const base = wblAuth.apiUrl.endsWith('/api') ? wblAuth.apiUrl : `${wblAuth.apiUrl}/api`;
+  const uploadUrl = `${base}/candidates/${wblAuth.candidateId}/marketing/upload-resume`;
+  const response = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${wblAuth.token}` },
+    body: formData,
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || 'Resume upload to WBL failed');
+  }
+  return response.json();
+}
 importScripts('/src/core/resumeProcessor.js');
 importScripts('/src/background/analytics.js');
 
@@ -17,6 +57,195 @@ try {
 
 // Track open side panels per window
 const openSidePanelWindows = new Set();
+const LAUNCH_CONTEXTS_KEY = 'talentscreenLaunchContexts';
+
+// Global variables to track the most recently clicked job board launch
+let lastLaunchUrl = null;
+let lastLaunchTime = 0;
+
+async function getLaunchContexts() {
+  const storage = chrome.storage.session || chrome.storage.local;
+  const result = await storage.get(LAUNCH_CONTEXTS_KEY);
+  return result[LAUNCH_CONTEXTS_KEY] || { pending: {}, tabs: {} };
+}
+
+async function saveLaunchContexts(contexts) {
+  const storage = chrome.storage.session || chrome.storage.local;
+  await storage.set({ [LAUNCH_CONTEXTS_KEY]: contexts });
+}
+
+async function syncWblResumeToStorage(request) {
+  const stored = await chrome.storage.local.get(['wblAuth', 'resumeData', 'resumeFile', 'normalizedData']);
+  const wblAuth = request.wblAuth || stored.wblAuth;
+
+  // ponytail: single global cache per browser — clear when WBL account switches
+  if (wblAuth?.candidateId && stored.wblAuth?.candidateId && stored.wblAuth.candidateId !== wblAuth.candidateId) {
+    await chrome.storage.local.remove(['resumeData', 'resumeFile', 'normalizedData']);
+  }
+
+  const patch = {};
+  if (request.wblAuth) patch.wblAuth = request.wblAuth;
+  if (request.resumeData) {
+    patch.resumeData = request.resumeData;
+    patch.normalizedData = ResumeProcessor.normalize(request.resumeData);
+  }
+
+  if (Object.keys(patch).length) {
+    await chrome.storage.local.set(patch);
+  }
+
+  const ctx = await fetchWblAutofillContext(wblAuth);
+  if (!ctx) {
+    console.warn('[TalentScreen] autofill-context fetch failed — check WBL login / site access');
+    return;
+  }
+
+  const apiPatch = {};
+  if (ctx.resume_data) {
+    apiPatch.resumeData = ctx.resume_data;
+    apiPatch.normalizedData = ResumeProcessor.normalize(ctx.resume_data);
+  }
+  if (ctx.resume_file) {
+    apiPatch.resumeFile = ctx.resume_file;
+  }
+  if (Object.keys(apiPatch).length) {
+    await chrome.storage.local.set(apiPatch);
+  } else {
+    await chrome.storage.local.remove(['resumeData', 'resumeFile', 'normalizedData']);
+    console.warn('[TalentScreen] no resume for candidate', wblAuth?.candidateId, '— upload on My Resume');
+  }
+}
+
+async function saveLaunchContext(request) {
+  const { resumeData, resumeFile, ...context } = request;
+  const contexts = await getLaunchContexts();
+  const nextContext = { ...context, launchedAt: Date.now() };
+  delete nextContext.jobDead;
+
+  contexts.pending[context.applicationUrl] = nextContext;
+  contexts.lastLaunch = nextContext;
+  contexts.deadTabs = contexts.deadTabs || {};
+  for (const tabId of Object.keys(contexts.tabs)) {
+    if (contexts.tabs[tabId].applicationUrl === context.applicationUrl) {
+      contexts.tabs[tabId] = nextContext;
+      delete contexts.deadTabs[tabId];
+    }
+  }
+  await saveLaunchContexts(contexts);
+  notifyLaunchContextUpdated(nextContext);
+
+  if ('resumeData' in request || request.wblAuth) {
+    const patch = {};
+    if (resumeData) {
+      patch.resumeData = resumeData;
+      patch.normalizedData = ResumeProcessor.normalize(resumeData);
+    }
+    if (request.wblAuth) {
+      patch.wblAuth = request.wblAuth;
+    } else if (request.candidateId) {
+      const existing = await chrome.storage.local.get(['wblAuth']);
+      patch.wblAuth = { ...(existing.wblAuth || {}), candidateId: request.candidateId };
+    }
+    if (Object.keys(patch).length) {
+      await chrome.storage.local.set(patch);
+    }
+    await syncWblResumeToStorage(request);
+  }
+}
+
+function normalizeUrl(url) {
+  if (!url) return '';
+  try {
+    const u = new URL(url);
+    const path = u.pathname.replace(/\/$/, "");
+    return `${u.protocol}//${u.hostname}${path}`;
+  } catch (e) {
+    return url.split('?')[0].split('#')[0].replace(/\/$/, "");
+  }
+}
+
+async function assignLaunchContext(tabId, url) {
+  if (!url) return null;
+  const contexts = await getLaunchContexts();
+  const normUrl = normalizeUrl(url);
+  const matchedKey = Object.keys(contexts.pending).find((key) => normalizeUrl(key) === normUrl);
+
+  if (matchedKey) {
+    contexts.tabs[tabId] = contexts.pending[matchedKey];
+    await saveLaunchContexts(contexts);
+    return contexts.tabs[tabId];
+  }
+
+  const stored = contexts.tabs[tabId];
+  if (stored && normalizeUrl(stored.applicationUrl) === normUrl) {
+    return stored;
+  }
+
+  if (lastLaunchUrl && normalizeUrl(lastLaunchUrl) === normUrl && Date.now() - lastLaunchTime < 30000) {
+    const pending = contexts.pending[lastLaunchUrl];
+    if (pending) {
+      contexts.tabs[tabId] = pending;
+      await saveLaunchContexts(contexts);
+      return pending;
+    }
+  }
+
+  if (stored && normalizeUrl(stored.applicationUrl) !== normUrl) {
+    delete contexts.tabs[tabId];
+    await saveLaunchContexts(contexts);
+  }
+  return null;
+}
+
+function isDashboardUrl(url) {
+  if (!url) return false;
+  return url.includes('localhost') || url.includes('127.0.0.1') || url.includes('whitebox-learning');
+}
+
+function notifyLaunchContextUpdated(context) {
+  if (!context) return;
+  chrome.runtime.sendMessage({ action: 'launch_context_updated', context }).catch(() => {});
+}
+
+async function syncLaunchTabsForUrl(applicationUrl) {
+  const contexts = await getLaunchContexts();
+  const pending = contexts.pending[applicationUrl];
+  if (!pending) return;
+
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    if (!tab.id || !tab.url) continue;
+    if (normalizeUrl(tab.url) !== normalizeUrl(applicationUrl)) continue;
+    contexts.tabs[tab.id] = pending;
+    await saveLaunchContexts(contexts);
+  }
+}
+
+function handlePrepareTalentScreenApply(request, sendResponse, sender) {
+  if (!request.applicationUrl || !request.jobId) {
+    sendResponse({ status: 'ignored' });
+    return false;
+  }
+
+  lastLaunchUrl = request.applicationUrl;
+  lastLaunchTime = Date.now();
+
+  saveLaunchContext(request)
+    .then(async () => {
+      await syncLaunchTabsForUrl(request.applicationUrl);
+      notifyLaunchContextUpdated({
+        jobId: request.jobId,
+        title: request.title,
+        company: request.company,
+        applicationUrl: request.applicationUrl,
+        resumeVersion: request.resumeVersion,
+        launchedAt: Date.now(),
+      });
+      sendResponse({ status: 'ready' });
+    })
+    .catch(() => sendResponse({ status: 'error' }));
+  return true;
+}
 
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name === "sidepanel") {
@@ -44,7 +273,7 @@ function isATSSite(url) {
   const jobBoards = [
     'greenhouse.io', 'lever.co', 'myworkdayjobs.com', 'workday.com',
     'smartrecruiters.com', 'applytojob.com', 'ashbyhq.com', 'bamboohr.com',
-    'icims.com', 'indeed.com', 'linkedin.com/jobs', 'workable.com',
+    'icims.com', 'indeed.com', 'linkedin.com', 'workable.com',
     'taleo.net', 'successfactors.com', 'personio.com', 'recruitee.com',
     'teamtailor.com', 'ultipro.com', 'ukg.com', 'paycomonline.net',
     'paychex.com', 'oraclecloud.com', 'brassring.com', 'adp.com',
@@ -53,74 +282,54 @@ function isATSSite(url) {
   return jobBoards.some(board => urlLower.includes(board));
 }
 
-// Helper function to try opening side panel with retry
-async function tryOpenSidePanel(tabId, windowId, retryCount = 0) {
-  const maxRetries = 3;
-
-  if (openSidePanelWindows.has(windowId)) {
-    console.log('[TalentScreen] Side panel already open for this window');
-    return true;
-  }
-
-  try {
-    await chrome.sidePanel.open({ tabId });
-    console.log(`[TalentScreen] Successfully opened side panel for tab ${tabId}`);
-    return true;
-  } catch (error) {
-    if (retryCount < maxRetries) {
-      // Retry after a short delay
-      setTimeout(() => {
-        tryOpenSidePanel(tabId, windowId, retryCount + 1);
-      }, 500 * (retryCount + 1)); // Exponential backoff: 500ms, 1000ms, 1500ms
-      console.log(`[TalentScreen] Retry ${retryCount + 1}/${maxRetries} to open side panel`);
-    } else {
-      console.log('[TalentScreen] Side panel requires user interaction to open');
-    }
-    return false;
-  }
+function isRecentLaunch() {
+  return lastLaunchUrl && (Date.now() - lastLaunchTime < 15000);
 }
 
-// Auto-open side panel on job sites
+function setAtsBadge(tabId) {
+  chrome.action.setBadgeText({ text: 'ON', tabId });
+  chrome.action.setBadgeBackgroundColor({ color: '#4CAF50', tabId });
+  chrome.action.setTitle({ title: 'Click to open TalentScreen autofill', tabId });
+}
+
+// Badge only on ATS tabs — side panel opens from Apply click (user gesture), not from tab events.
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'complete' && tab.url) {
-    const isJobSite = isATSSite(tab.url);
-
-    if (isJobSite) {
-      // Show badge to indicate ATS site detected
-      chrome.action.setBadgeText({ text: 'ON', tabId });
-      chrome.action.setBadgeBackgroundColor({ color: '#4CAF50', tabId });
-      chrome.action.setTitle({ title: 'Click to open TalentScreen autofill', tabId });
-
-      // Store that we detected a job site
-      chrome.storage.session?.set({ lastJobSiteDetected: { url: tab.url, tabId, windowId: tab.windowId } }).catch(() => { });
-
-      // Try to auto-open side panel
-      await tryOpenSidePanel(tabId, tab.windowId);
-    } else {
-      // Clear badge on non-ATS sites
-      chrome.action.setBadgeText({ text: '', tabId });
-      chrome.action.setTitle({ title: 'Open side panel', tabId });
+  if (changeInfo.url) {
+    const contexts = await getLaunchContexts();
+    if (contexts.deadTabs?.[tabId]) {
+      delete contexts.deadTabs[tabId];
+      await saveLaunchContexts(contexts);
     }
+  }
+
+  if (changeInfo.status !== 'complete' || !tab.url) return;
+
+  await assignLaunchContext(tabId, tab.url);
+  const contexts = await getLaunchContexts();
+  const ctx = contexts.tabs[tabId];
+  if (ctx) notifyLaunchContextUpdated(ctx);
+
+  if (isATSSite(tab.url)) {
+    setAtsBadge(tabId);
+    chrome.storage.session?.set({ lastJobSiteDetected: { url: tab.url, tabId, windowId: tab.windowId } }).catch(() => { });
+  } else {
+    chrome.action.setBadgeText({ text: '', tabId });
+    chrome.action.setTitle({ title: 'Open side panel', tabId });
   }
 });
 
-// Also handle tab activation (switching between tabs)
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
   const tab = await chrome.tabs.get(activeInfo.tabId);
-  if (tab.url) {
-    const isJobSite = isATSSite(tab.url);
+  if (!tab.url) return;
 
-    if (isJobSite) {
-      chrome.action.setBadgeText({ text: 'ON', tabId: activeInfo.tabId });
-      chrome.action.setBadgeBackgroundColor({ color: '#4CAF50', tabId: activeInfo.tabId });
-      chrome.action.setTitle({ title: 'Click to open TalentScreen autofill', tabId: activeInfo.tabId });
+  const ctx = await assignLaunchContext(activeInfo.tabId, tab.url);
+  if (ctx) notifyLaunchContextUpdated(ctx);
 
-      // Try to auto-open side panel when switching to ATS tab
-      await tryOpenSidePanel(activeInfo.tabId, activeInfo.windowId);
-    } else {
-      chrome.action.setBadgeText({ text: '', tabId: activeInfo.tabId });
-      chrome.action.setTitle({ title: 'Open side panel', tabId: activeInfo.tabId });
-    }
+  if (isATSSite(tab.url)) {
+    setAtsBadge(activeInfo.tabId);
+  } else {
+    chrome.action.setBadgeText({ text: '', tabId: activeInfo.tabId });
+    chrome.action.setTitle({ title: 'Open side panel', tabId: activeInfo.tabId });
   }
 });
 
@@ -133,18 +342,10 @@ chrome.windows.onCreated.addListener(async (window) => {
       const activeTab = tabs.find(tab => tab.active);
 
       if (activeTab && activeTab.url && isATSSite(activeTab.url)) {
-        console.log('[TalentScreen] New window opened with ATS site, attempting to open side panel');
-
-        // Show badge
-        chrome.action.setBadgeText({ text: 'ON', tabId: activeTab.id });
-        chrome.action.setBadgeBackgroundColor({ color: '#4CAF50', tabId: activeTab.id });
-        chrome.action.setTitle({ title: 'Click to open TalentScreen autofill', tabId: activeTab.id });
-
-        // Try to open side panel
-        await tryOpenSidePanel(activeTab.id, window.id);
+        setAtsBadge(activeTab.id);
       }
     } catch (error) {
-      console.log('[TalentScreen] Error checking new window tabs:', error);
+      console.warn('[TalentScreen] Error checking new window tabs:', error);
     }
   }, 1000); // Wait 1 second for page to start loading
 });
@@ -161,32 +362,42 @@ chrome.runtime.onInstalled.addListener(() => {
     title: "Force Fill Data",
     contexts: ["all"]
   });
-
-  console.log('[TalentScreen] Extension installed/updated - auto-open enabled for ATS sites');
 });
 
 // Handle new tabs created (e.g., opening links in new tabs)
 chrome.tabs.onCreated.addListener(async (tab) => {
-  // Wait a bit for the URL to be available
+  if (isRecentLaunch()) {
+    try {
+      const contexts = await getLaunchContexts();
+      if (contexts.pending[lastLaunchUrl]) {
+        contexts.tabs[tab.id] = contexts.pending[lastLaunchUrl];
+        await saveLaunchContexts(contexts);
+      }
+    } catch (e) {
+      console.warn('[TalentScreen] Failed to assign launch context on tab creation:', e);
+    }
+  }
+
   setTimeout(async () => {
     try {
       const updatedTab = await chrome.tabs.get(tab.id);
-      if (updatedTab.url && isATSSite(updatedTab.url)) {
-        console.log('[TalentScreen] New tab created with ATS site');
-
-        // Show badge
-        chrome.action.setBadgeText({ text: 'ON', tabId: tab.id });
-        chrome.action.setBadgeBackgroundColor({ color: '#4CAF50', tabId: tab.id });
-        chrome.action.setTitle({ title: 'Click to open TalentScreen autofill', tabId: tab.id });
-
-        // Try to open side panel
-        await tryOpenSidePanel(tab.id, tab.windowId);
+      if (!updatedTab.url) return;
+      await assignLaunchContext(tab.id, updatedTab.url);
+      if (isATSSite(updatedTab.url)) {
+        setAtsBadge(tab.id);
       }
-    } catch (error) {
-      // Tab might have been closed or URL not yet available
-      console.log('[TalentScreen] Tab created but URL not ready yet');
+    } catch {
+      // Tab URL not ready yet
     }
   }, 500);
+});
+
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  const contexts = await getLaunchContexts();
+  if (contexts.tabs[tabId]) {
+    delete contexts.tabs[tabId];
+    await saveLaunchContexts(contexts);
+  }
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
@@ -225,8 +436,157 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.action === 'send_feedback_email') {
     handleFeedbackEmail(request.feedback, request.emailBody);
     sendResponse({ status: 'email_queued' });
+  } else if (request.action === 'get_talentscreen_launch_context') {
+    const tabId = request.tabId || (sender.tab && sender.tab.id);
+    if (!tabId) {
+      sendResponse(null);
+    } else {
+      chrome.tabs.get(tabId)
+        .then(async (tab) => {
+          const contexts = await getLaunchContexts();
+          let context = await assignLaunchContext(tabId, tab.url || '');
+
+          if (!context && contexts.lastLaunch) {
+            const age = Date.now() - (contexts.lastLaunch.launchedAt || 0);
+            const tabNorm = normalizeUrl(tab.url || '');
+            const launchNorm = normalizeUrl(contexts.lastLaunch.applicationUrl || '');
+            if (age < 30000 && (tabNorm === launchNorm || isDashboardUrl(tab.url))) {
+              context = contexts.lastLaunch;
+            }
+          }
+
+          sendResponse(context);
+        })
+        .catch(async () => {
+          sendResponse(null);
+        });
+    }
+    return true;
+  } else if (request.action === 'autofill_talentscreen_launch') {
+    if (!sender.tab?.id) {
+      sendResponse({ status: 'error' });
+      return true;
+    }
+    chrome.storage.local.get(['resumeData', 'normalizedData', 'resumeFile'], (result) => {
+      if (!result.resumeData || !result.resumeFile) {
+        sendResponse({ status: 'resume_required' });
+        return;
+      }
+      chrome.tabs.sendMessage(sender.tab.id, {
+        action: 'fill_form',
+        data: result.resumeData,
+        normalizedData: result.normalizedData || ResumeProcessor.normalize(result.resumeData),
+        resumeFile: result.resumeFile,
+        manual: true,
+      }, () => sendResponse({ status: chrome.runtime.lastError ? 'error' : 'started' }));
+    });
+  } else if (request.action === 'job_page_ready') {
+    // Side panel opens on Apply click (user gesture) — not here (gesture expired).
+    sendResponse({ status: 'ack' });
+  } else if (request.action === 'job_page_dead') {
+    const tabId = sender.tab?.id;
+    if (tabId) {
+      chrome.action.setBadgeText({ text: '', tabId });
+    }
+    sendResponse({ status: 'logged' });
+  } else if (request.action === 'open_side_panel_now') {
+    // Must run in this turn (user gesture). Prefer windowId so the panel
+    // stays open when Apply opens the job in a new tab.
+    const tabId = sender.tab?.id;
+    const windowId = sender.tab?.windowId;
+    const opts = windowId ? { windowId } : tabId ? { tabId } : null;
+    if (opts && chrome.sidePanel?.open) {
+      const opened = chrome.sidePanel.open(opts);
+      if (opened?.catch) {
+        opened.catch((e) => console.warn('[TalentScreen] sidePanel.open failed:', e.message));
+      }
+    } else {
+      console.warn('[TalentScreen] sidePanel.open skipped — no tab/window on sender');
+    }
+    sendResponse({ status: 'opened', tabId: tabId || null, windowId: windowId || null });
+    return false;
+  } else if (request.action === 'ping_wbl_bridge') {
+    sendResponse({ ok: true, version: chrome.runtime.getManifest().version });
+  } else if (request.action === 'sync_wbl_resume') {
+    syncWblResumeToStorage(request)
+      .then(() => sendResponse({ status: 'ok' }))
+      .catch((e) => sendResponse({ status: 'error', message: e.message || String(e) }));
+    return true;
+  } else if (request.action === 'fetch_wbl_resume') {
+    chrome.storage.local.get(['wblAuth'], async (stored) => {
+      try {
+        await syncWblResumeToStorage({ wblAuth: stored.wblAuth, candidateId: stored.wblAuth?.candidateId });
+        const latest = await chrome.storage.local.get(['resumeData', 'resumeFile']);
+        if (!latest.resumeData) {
+          sendResponse({ status: stored.wblAuth?.token ? 'empty' : 'no_auth' });
+          return;
+        }
+        sendResponse({
+          status: 'ok',
+          resumeData: latest.resumeData,
+          resumeFile: latest.resumeFile || null,
+        });
+      } catch (e) {
+        sendResponse({ status: 'error', message: e.message || String(e) });
+      }
+    });
+    return true;
+  } else if (request.action === 'upload_resume_to_wbl') {
+    chrome.storage.local.get(['wblAuth'], async (stored) => {
+      try {
+        const result = await uploadResumeToMyResume(request.resumeFile, stored.wblAuth);
+        if (result?.status === 'no_auth') {
+          sendResponse({ status: 'no_auth' });
+          return;
+        }
+        const resumeData = result.candidate_json || null;
+        const patch = { resumeFile: request.resumeFile };
+        if (resumeData) {
+          patch.resumeData = resumeData;
+          patch.normalizedData = ResumeProcessor.normalize(resumeData);
+        }
+        await chrome.storage.local.set(patch);
+        sendResponse({ status: 'ok', resumeData });
+      } catch (e) {
+        sendResponse({ status: 'error', message: e.message || String(e) });
+      }
+    });
+    return true;
+  } else if (request.action === 'prepare_talentscreen_apply') {
+    return handlePrepareTalentScreenApply(request, sendResponse, sender);
   }
-  return true; // Keep message channel open for async response
+  return false;
+});
+
+chrome.runtime.onMessageExternal.addListener((request, sender, sendResponse) => {
+  if (request.action === 'open_side_panel_now') {
+    const windowId = sender.tab?.windowId;
+    const tabId = sender.tab?.id;
+    if (windowId) {
+      chrome.sidePanel.open({ windowId });
+    } else if (tabId) {
+      chrome.sidePanel.open({ tabId });
+    }
+    sendResponse({ status: 'opened' });
+    return;
+  }
+  if (request.action !== 'prepare_talentscreen_apply' || !sender.url) {
+    sendResponse({ status: 'ignored' });
+    return;
+  }
+
+  try {
+    const hostname = new URL(sender.url).hostname;
+    if (hostname !== 'whitebox-learning.com' && !hostname.endsWith('.whitebox-learning.com') && hostname !== 'localhost') {
+      sendResponse({ status: 'ignored' });
+      return;
+    }
+  } catch {
+    sendResponse({ status: 'ignored' });
+    return;
+  }
+
+  return handlePrepareTalentScreenApply(request, sendResponse, sender);
 });
 
 function logApplicationFill(data) {
@@ -322,12 +682,7 @@ function handleFeedbackEmail(feedback, emailBody) {
         }, 2000);
       }
     });
-
-    console.log('[TalentScreen] Feedback email opened in default email client');
   } catch (error) {
     console.error('[TalentScreen] Error opening feedback email:', error);
   }
 }
-
-
-

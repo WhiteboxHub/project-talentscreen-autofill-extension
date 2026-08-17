@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TalentScreen - Whitebox Learning Autofill",
-  "version": "2.1.2",
+  "version": "2.3.0",
   "description": "Intelligently autofills job applications across 26+ ATS platforms using your JSON resume data. Save time, apply faster.",
   "author": "Whitebox Learning - Sampath Velupula",
   "homepage_url": "https://chromewebstore.google.com/detail/talentscreen-autofill/bebdlhhpgmegdebdballinfmfnlpmeio",
@@ -13,10 +13,12 @@
     "tabs"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://www.google-analytics.com https://analytics.google.com https://whitebox-learning.com;"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://localhost http://localhost/* http://127.0.0.1 http://127.0.0.1/* http://localhost:8000 http://localhost:8000/* http://127.0.0.1:8000 http://127.0.0.1:8000/* https://www.google-analytics.com https://analytics.google.com https://whitebox-learning.com https://*.whitebox-learning.com;"
   },
   "host_permissions": [
     "https://*.whitebox-learning.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
     "*://*.myworkdayjobs.com/*",
     "*://*.isolvedhire.com/*",
     "*://*.greenhouse.io/*",
@@ -52,6 +54,12 @@
     "*://ats.rippling.com/*",
     "*://*.silkroad.com/*"
   ],
+  "externally_connectable": {
+    "matches": [
+      "https://*.whitebox-learning.com/*",
+      "http://localhost/*"
+    ]
+  },
   "background": {
     "service_worker": "src/background/background.js"
   },
@@ -62,6 +70,15 @@
     "default_path": "src/ui/sidepanel.html"
   },
   "content_scripts": [
+    {
+      "matches": [
+        "https://*.whitebox-learning.com/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": ["src/content/wbl-bridge.js"],
+      "run_at": "document_start"
+    },
     {
       "matches": [
         "*://*.myworkdayjobs.com/*",

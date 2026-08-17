@@ -30,7 +30,6 @@ document.addEventListener('DOMContentLoaded', () => {
         'jobvite.com', 'rippling-ats.com', 'ats.rippling.com',
         'silkroad.com', 'kforce.com'
     ];
-
     // Setup View Elements
     const setupView = document.getElementById('setupView');
     const jsonInput = document.getElementById('jsonInput');
@@ -104,12 +103,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const resumeFileSize = document.getElementById('resumeFileSize');
 
     // Initialize UI state
+    function syncResumeFromWbl() {
+        return new Promise((resolve) => {
+            chrome.runtime.sendMessage({ action: 'fetch_wbl_resume' }, resolve);
+        });
+    }
+
     async function init() {
         try {
-            // Migrate legacy storage if needed
             await ResumeManager.migrateLegacy();
 
-            chrome.storage.local.get(['resumeData', 'resumeFile', 'applicationHistory'], (result) => {
+            chrome.storage.local.get(['resumeData', 'resumeFile', 'applicationHistory'], async (result) => {
                 if (chrome.runtime.lastError) {
                     console.error('[Sidepanel] Storage error:', chrome.runtime.lastError);
                     showStatus('Failed to load data from storage', 'error');
@@ -120,6 +124,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentResumeFile = result.resumeFile || null;
                 applicationHistory = result.applicationHistory || [];
 
+                if (!currentResumeData) {
+                    const fetched = await syncResumeFromWbl();
+                    if (fetched?.status === 'ok') {
+                        currentResumeData = fetched.resumeData || null;
+                        currentResumeFile = fetched.resumeFile || currentResumeFile;
+                    }
+                }
+
+                syncSetupResumeData();
                 updateUI();
                 renderHistory();
             });
@@ -129,87 +142,124 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName !== 'local' || (!changes.resumeData && !changes.resumeFile)) return;
+        if (changes.resumeData) currentResumeData = changes.resumeData.newValue || null;
+        if (changes.resumeFile) currentResumeFile = changes.resumeFile.newValue || null;
+        syncSetupResumeData();
+        updateUI();
+        updateJobInfoCard();
+    });
+
+    function syncSetupResumeData() {
+        // Resume comes from WBL My Resume via Apply with TalentScreen — no upload in extension.
+        setupView?.classList.add('hidden');
+    }
+
+    function updateResumeReminder() {
+        if (!jobMeta) return;
+        if (!currentResumeData) {
+            jobMeta.innerHTML = '<span style="color: #f59e0b; font-weight: 600;">Upload resume on WBL My Resume, then use Apply with TalentScreen</span>';
+        } else if (jobMeta.innerHTML.includes('Review your information') || jobMeta.innerHTML.includes('Optimized ATS') || jobMeta.innerHTML.includes('Smart Heuristics')) {
+            return;
+        } else if (currentResumeFile) {
+            jobMeta.innerHTML = '<span style="color: #10b981; font-weight: 600;">✓ Resume loaded from My Resume</span>';
+        }
+    }
+
     // Update UI based on data state
     function updateUI() {
-        const hasData = currentResumeData !== null && currentResumeFile !== null;
-        const isSupported = checkPageSupport();
-
-        // Hide all views first
         setupView.classList.add('hidden');
         unsupportedView.classList.add('hidden');
-        activeView.classList.add('hidden');
-
-        if (!isSupported) {
-            // Show unsupported view
-            unsupportedView.classList.remove('hidden');
-        } else if (hasData) {
-            // Show active view
-            activeView.classList.remove('hidden');
-            updateJobInfoCard();
-            updateResumeFileDisplay();
-        } else {
-            // Show setup view
-            setupView.classList.remove('hidden');
-        }
+        activeView.classList.remove('hidden');
+        updateJobInfoCard();
+        updateResumeFileDisplay();
+        updateResumeReminder();
     }
 
-    // Check if current page is supported
     function checkPageSupport() {
-        try {
-            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                if (!tabs || !tabs[0]) return true; // Default to supported if can't check
+        return true;
+    }
 
-                const url = tabs[0].url;
-                if (!url) return true;
+    function isDashboardUrl(url) {
+        return !!(url && (url.includes('localhost') || url.includes('127.0.0.1') || url.includes('whitebox-learning')));
+    }
 
-                const isSupported = SUPPORTED_ATS.some(ats => url.includes(ats));
+    function titleFromTab(tab) {
+        const raw = (tab.title || '').replace(/\s+/g, ' ').trim();
+        if (!raw) return 'Job Application';
+        return raw.length > 80 ? `${raw.slice(0, 80)}...` : raw;
+    }
 
-                // Update UI based on support status
-                if (!isSupported && url.startsWith('http')) {
-                    // Only show unsupported for actual job sites (not chrome:// or file://)
-                    updateUIForUnsupported();
-                }
-            });
-        } catch (error) {
-            console.error('[Sidepanel] Error checking page support:', error);
+    function setAutofillEnabled(enabled) {
+        if (!fillFormBtn) return;
+        fillFormBtn.disabled = !enabled;
+        fillFormBtn.style.opacity = enabled ? '1' : '0.45';
+        fillFormBtn.style.cursor = enabled ? 'pointer' : 'not-allowed';
+    }
+
+    function applyLaunchContextToCard(context, tabUrl) {
+        if (!context || (!context.company && !context.title)) return false;
+
+        setAutofillEnabled(!!currentResumeData);
+        if (companyName) {
+            companyName.textContent = context.company || companyName.textContent;
         }
-
-        return true; // Default to supported
+        if (jobTitle) {
+            jobTitle.textContent = context.title || jobTitle.textContent;
+        }
+        if (jobMeta) {
+            jobMeta.innerHTML = '<span style="color: #10b981; font-weight: 600;">Review your information before autofill</span>';
+            updateResumeReminder();
+        }
+        return true;
     }
-
-    // Update UI for unsupported page
-    function updateUIForUnsupported() {
-        setupView.classList.add('hidden');
-        activeView.classList.add('hidden');
-        unsupportedView.classList.remove('hidden');
-    }
-
-    // Update job info card with current page info
     function updateJobInfoCard() {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             if (!tabs[0] || !tabs[0].url) return;
 
-            const tabUrl = tabs[0].url;
+            const tab = tabs[0];
+            const tabUrl = tab.url;
 
-            // Skip non-web pages: extension pages, mailto, about, new tab, etc.
-            // These would expose the extension ID or garbage in the company name field.
             if (!tabUrl.startsWith('http://') && !tabUrl.startsWith('https://')) return;
 
-            const url = new URL(tabUrl);
-            const hostname = url.hostname.replace('www.', '');
+            chrome.runtime.sendMessage({ action: 'get_talentscreen_launch_context', tabId: tab.id }, (context) => {
+                if (chrome.runtime.lastError) {
+                    console.warn('[Sidepanel] launch context error:', chrome.runtime.lastError.message);
+                }
 
-            if (companyName) {
-                companyName.textContent = hostname;
-            }
-            if (jobTitle) {
-                jobTitle.textContent = tabs[0].title.substring(0, 50) + (tabs[0].title.length > 50 ? '...' : '');
-            }
-            if (jobMeta) {
-                const isOptimized = SUPPORTED_ATS.some(ats => tabUrl.includes(ats));
-                jobMeta.innerHTML = isOptimized
-                    ? '<span style="color: #10b981; font-weight: 600;">✓ Optimized ATS Platform</span>'
-                    : '<span style="color: #6366f1; font-weight: 600;">⚡ Smart Heuristics Active</span>';
-            }
+                if (context && applyLaunchContextToCard(context, tabUrl)) {
+                    return;
+                }
+
+                if (isDashboardUrl(tabUrl)) {
+                    if (companyName) companyName.textContent = 'Whitebox Job Board';
+                    if (jobTitle) jobTitle.textContent = 'Switch to the job application tab';
+                    if (jobMeta) {
+                        jobMeta.innerHTML = '<span style="color: #6366f1; font-weight: 600;">Apply with TalentScreen opens the job in a new tab</span>';
+                        updateResumeReminder();
+                    }
+                    setAutofillEnabled(false);
+                    return;
+                }
+
+                setAutofillEnabled(!!currentResumeData);
+
+                try {
+                    const hostname = new URL(tabUrl).hostname.replace('www.', '');
+                    if (companyName) companyName.textContent = hostname;
+                } catch (_) {
+                    if (companyName) companyName.textContent = 'Company';
+                }
+                if (jobTitle) jobTitle.textContent = titleFromTab(tab);
+                if (jobMeta) {
+                    const isOptimized = SUPPORTED_ATS.some((ats) => tabUrl.includes(ats));
+                    jobMeta.innerHTML = isOptimized
+                        ? '<span style="color: #10b981; font-weight: 600;">Review your information before autofill</span>'
+                        : '<span style="color: #6366f1; font-weight: 600;">Review your information before autofill</span>';
+                    updateResumeReminder();
+                }
+            });
         });
     }
 
@@ -340,7 +390,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 pdfStatus.textContent = `✓ ${file.name}`;
                 pdfStatus.classList.remove('hidden');
                 pdfStatus.classList.add('success');
-                checkSetupComplete();
+                if (currentResumeData) {
+                    chrome.storage.local.set({
+                        resumeData: currentResumeData,
+                        normalizedData: ResumeProcessor.normalize(currentResumeData),
+                        resumeFile: currentResumeFile,
+                    }, () => {
+                        if (!chrome.runtime.lastError) updateUI();
+                    });
+                } else {
+                    chrome.storage.local.set({ resumeFile: currentResumeFile }, () => {
+                        if (!chrome.runtime.lastError) updateUI();
+                    });
+                }
             } catch (error) {
                 console.error('[Sidepanel] PDF processing error:', error);
                 pdfStatus.textContent = `✗ ${error.message}`;
@@ -362,32 +424,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Check if setup is complete
     function checkSetupComplete() {
-        if (setupJsonUploaded && setupPdfUploaded) {
-            completeSetupBtn.disabled = false;
-        } else {
-            completeSetupBtn.disabled = true;
-        }
+        completeSetupBtn.disabled = !currentResumeFile;
     }
 
     // Complete Setup Button
     if (completeSetupBtn) {
         completeSetupBtn.addEventListener('click', async () => {
-            if (!setupJsonUploaded || !setupPdfUploaded) {
-                showStatus('Both JSON and PDF files are required', 'error');
+            if (!currentResumeFile) {
+                showStatus('Upload your resume PDF/DOC to continue.', 'error');
                 return;
             }
 
             try {
-                const normalized = ResumeProcessor.normalize(currentResumeData);
+                showStatus('Saving resume...', 'info');
 
-                // Save to multi-resume storage
-                await ResumeManager.add(currentResumeData, currentResumeFile);
+                // Pull JSON from WBL My Resume if logged in (never upload from extension)
+                if (!currentResumeData) {
+                    const fetched = await tryLoadResumeFromWbl();
+                    if (fetched?.status === 'ok' && fetched.resumeData) {
+                        currentResumeData = fetched.resumeData;
+                        if (fetched.resumeFile) currentResumeFile = fetched.resumeFile;
+                    }
+                }
 
-                // Also save to legacy storage for backward compatibility
+                const normalized = currentResumeData
+                    ? ResumeProcessor.normalize(currentResumeData)
+                    : null;
+
+                if (currentResumeData) {
+                    await ResumeManager.add(currentResumeData, currentResumeFile);
+                }
+
                 chrome.storage.local.set({
-                    resumeData: currentResumeData,
+                    resumeData: currentResumeData || null,
                     normalizedData: normalized,
-                    resumeFile: currentResumeFile
+                    resumeFile: currentResumeFile,
                 }, () => {
                     if (chrome.runtime.lastError) {
                         console.error('[Sidepanel] Storage error:', chrome.runtime.lastError);
@@ -395,12 +466,19 @@ document.addEventListener('DOMContentLoaded', () => {
                         return;
                     }
 
-                    setupJsonUploaded = false;
+                    setupJsonUploaded = !!currentResumeData;
                     setupPdfUploaded = false;
                     jsonStatus.classList.add('hidden');
                     pdfStatus.classList.add('hidden');
                     updateUI();
-                    showStatus('Setup complete! Ready to autofill.', 'success');
+                    if (currentResumeData) {
+                        showStatus('Setup complete! Ready to autofill.', 'success');
+                    } else {
+                        showStatus(
+                            'Resume file saved. Use Apply with TalentScreen on WBL Job Board to load your profile for autofill.',
+                            'info'
+                        );
+                    }
                 });
             } catch (error) {
                 console.error('[Sidepanel] Setup completion error:', error);
@@ -454,8 +532,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Fill Form button - with confirmation if progress exists
     if (fillFormBtn) {
         fillFormBtn.addEventListener('click', async () => {
+            if (fillFormBtn.disabled) {
+                return;
+            }
             if (!currentResumeData) {
-                showStatus('No resume data loaded', 'error');
+                showStatus('Upload your resume on WBL My Resume, then click Apply with TalentScreen from the Job Board.', 'error');
                 return;
             }
 
@@ -499,7 +580,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                 data: currentResumeData,
                                 normalizedData: normalized,
                                 resumeFile: storage.resumeFile,
-                                manual: true
+                                manual: true,
+                                autoSubmit: true
                             }, (response) => {
                                 if (chrome.runtime.lastError) {
                                     console.error('[Sidepanel] Message error:', chrome.runtime.lastError);
@@ -1251,7 +1333,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Handle enhanced progress messages from FormTracker
     chrome.runtime.onMessage.addListener((msg) => {
         try {
-            if (msg.action === 'update_progress') {
+            if (msg.action === 'launch_context_updated' && msg.context) {
+                chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                    const tabUrl = tabs[0]?.url || '';
+                    applyLaunchContextToCard(msg.context, tabUrl);
+                });
+            } else if (msg.action === 'update_progress') {
                 updateProgressDisplay(msg);
                 } else if (msg.action === 'tracking_completed') {
                     updateFieldStatusDisplay();
@@ -1784,4 +1871,9 @@ document.addEventListener('DOMContentLoaded', () => {
     loadTrackingHistory();
     initActiveSessionTracking();
     initActionButtons();
+
+    chrome.tabs.onActivated.addListener(() => updateJobInfoCard());
+    chrome.tabs.onUpdated.addListener((_tabId, info) => {
+        if (info.status === 'complete' || info.title) updateJobInfoCard();
+    });
 });
